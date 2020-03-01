@@ -14,6 +14,7 @@ LEAVE = "leave"
 NEXT = "next"
 IF = "if_branch"
 ELSE = "else_branch"
+CONTINUE = "continue"
 
 
 # TODO: add links from CFNodes to the corresponding AST nodes.
@@ -121,11 +122,13 @@ def analyse_statements(stmts, context):
 
             body_context = context.copy()
             body_context[LEAVE] = while_node
+            body_context[CONTINUE] = while_node
             body_node = analyse_statements(stmt.body, body_context)
 
             while_node._add_edge(NEXT, body_node)
             stmt_node = while_node
-
+        elif isinstance(stmt, ast.Continue):
+            stmt_node = CFNode({CONTINUE: context[CONTINUE]})
         else:
             raise NotImplementedError("Unhandled stmt type", type(stmt))
 
@@ -369,6 +372,39 @@ def f():
         self.assertEqual(while_node.target(RAISE), function_context[RAISE])
 
         body_node = while_node.target(NEXT)
+        self.assertEqual(body_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(body_node.target(NEXT), while_node)
+
+        else_node = while_node.target(ELSE)
+        self.assertEqual(else_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(else_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(else_node.target(NEXT), function_context[LEAVE])
+
+    def test_while_with_continue(self):
+        code = """\
+def f():
+    while some_condition:
+        if not_interesting:
+            continue
+        do_something()
+    else:
+        do_no_break_stuff()
+"""
+        function_context, while_node = self._function_context(code)
+
+        self.assertEqual(while_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(while_node.target(RAISE), function_context[RAISE])
+
+        test_node = while_node.target(NEXT)
+        self.assertEqual(test_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(test_node.edge_names, {IF, ELSE, RAISE})
+
+        continue_node = test_node.target(IF)
+        self.assertEqual(continue_node.edge_names, {CONTINUE})
+        self.assertEqual(continue_node.target(CONTINUE), while_node)
+
+        body_node = test_node.target(ELSE)
         self.assertEqual(body_node.edge_names, {NEXT, RAISE})
         self.assertEqual(body_node.target(RAISE), function_context[RAISE])
         self.assertEqual(body_node.target(NEXT), while_node)
