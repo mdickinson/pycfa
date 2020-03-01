@@ -93,6 +93,33 @@ def analyse_statements(stmts, context):
                     RAISE: context[RAISE],
                 }
             )
+        elif isinstance(stmt, ast.While):
+
+            # while statement:
+            #   - the condition can raise, so we have a RAISE edge
+            #   - we can enter the 'else' block (always : even if
+            #     there's an unconditional break in the body, we may
+            #     iterate zero times), so we have an ELSE edge
+            #   - we can enter the loop body
+
+            else_context = context.copy()
+            else_context[LEAVE] = head
+            else_node = analyse_statements(stmt.orelse, else_context)
+
+            while_node = CFNode(
+                {
+                    RAISE: context[RAISE],
+                    ELSE: else_node,
+                }
+            )
+
+            body_context = context.copy()
+            body_context[LEAVE] = while_node
+            body_node = analyse_statements(stmt.body, body_context)
+
+            while_node._add_edge(NEXT, body_node)
+            stmt_node = while_node
+
         else:
             raise NotImplementedError("Unhandled stmt type", type(stmt))
 
@@ -304,6 +331,45 @@ def f():
         stmt2_node = stmt1_node.target(NEXT)
         self.assertEqual(stmt2_node.edge_names, {RETURN})
         self.assertEqual(stmt2_node.target(RETURN), function_context[RETURN])
+
+    def test_while(self):
+        code = """\
+def f():
+    while some_condition:
+        do_something()
+"""
+        function_context, while_node = self._function_context(code)
+
+        self.assertEqual(while_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(while_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(while_node.target(ELSE), function_context[LEAVE])
+
+        body_node = while_node.target(NEXT)
+        self.assertEqual(body_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(body_node.target(NEXT), while_node)
+
+    def test_while_with_two_statements(self):
+        code = """\
+def f():
+    while some_condition:
+        do_something()
+        do_something_else()
+"""
+        function_context, while_node = self._function_context(code)
+
+        self.assertEqual(while_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(while_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(while_node.target(ELSE), function_context[LEAVE])
+
+        body_node1 = while_node.target(NEXT)
+        self.assertEqual(body_node1.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node1.target(RAISE), function_context[RAISE])
+
+        body_node2 = body_node1.target(NEXT)
+        self.assertEqual(body_node2.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node2.target(RAISE), function_context[RAISE])
+        self.assertEqual(body_node2.target(NEXT), while_node)
 
     # Helper methods
 
