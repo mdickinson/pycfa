@@ -16,7 +16,13 @@ IF = "if_branch"
 ELSE = "else_branch"
 
 
-# To do: add links from CFNodes to the corresponding AST nodes.
+# TODO: add links from CFNodes to the corresponding AST nodes.
+# TODO: Test while with else, then for and for with else.
+# TODO: Add support for break, continue
+# TODO: Rename _add_edge back to add_edge
+# TODO: test raise
+# TODO: try/finally
+# TODO: try/except/else
 
 
 class CFNode:
@@ -348,6 +354,29 @@ def f():
         self.assertEqual(body_node.edge_names, {NEXT, RAISE})
         self.assertEqual(body_node.target(RAISE), function_context[RAISE])
         self.assertEqual(body_node.target(NEXT), while_node)
+
+    def test_while_else(self):
+        code = """\
+def f():
+    while some_condition:
+        do_something()
+    else:
+        do_no_break_stuff()
+"""
+        function_context, while_node = self._function_context(code)
+
+        self.assertEqual(while_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(while_node.target(RAISE), function_context[RAISE])
+
+        body_node = while_node.target(NEXT)
+        self.assertEqual(body_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(body_node.target(NEXT), while_node)
+
+        else_node = while_node.target(ELSE)
+        self.assertEqual(else_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(else_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(else_node.target(NEXT), function_context[LEAVE])
 
     def test_while_with_two_statements(self):
         code = """\
