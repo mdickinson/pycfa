@@ -20,7 +20,6 @@ BREAK = "break"
 
 # TODO: add links from CFNodes to the corresponding AST nodes.
 # TODO: Rename _add_edge back to add_edge
-# TODO: test raise
 # TODO: try/finally
 # TODO: try/except/else
 
@@ -34,9 +33,9 @@ class CFNode:
         # Outward edges for possible control flow transfer.
         self._out = {}
         for name, target in edges.items():
-            self._add_edge(name, target)
+            self.add_edge(name, target)
 
-    def _add_edge(self, name, target):
+    def add_edge(self, name, target):
         # For now, be careful about overwriting.
         if name in self._out:
             raise ValueError("An edge with that name already exists")
@@ -112,7 +111,7 @@ def analyse_statements(stmts, context):
             body_context[BREAK] = head
             body_node = analyse_statements(stmt.body, body_context)
 
-            loop_node._add_edge(NEXT, body_node)
+            loop_node.add_edge(NEXT, body_node)
             stmt_node = loop_node
         elif isinstance(stmt, ast.Raise):
             stmt_node = CFNode({RAISE: context[RAISE]})
