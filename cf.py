@@ -19,7 +19,6 @@ BREAK = "break"
 
 
 # TODO: add links from CFNodes to the corresponding AST nodes.
-# TODO: Support "for"
 # TODO: Rename _add_edge back to add_edge
 # TODO: test raise
 # TODO: try/finally
@@ -100,28 +99,23 @@ def analyse_statements(stmts, context):
                     RAISE: context[RAISE],
                 }
             )
-        elif isinstance(stmt, ast.While):
-            # while statement:
-            #   - the condition can raise, so we have a RAISE edge
-            #   - we can enter the 'else' block (always : even if
-            #     there's an unconditional break in the body, we may
-            #     iterate zero times), so we have an ELSE edge
-            #   - we can enter the loop body
-
+        elif isinstance(stmt, (ast.For, ast.While)):
             else_context = context.copy()
             else_context[LEAVE] = head
             else_node = analyse_statements(stmt.orelse, else_context)
 
-            while_node = CFNode({RAISE: context[RAISE], ELSE: else_node,})
+            loop_node = CFNode({RAISE: context[RAISE], ELSE: else_node})
 
             body_context = context.copy()
-            body_context[LEAVE] = while_node
-            body_context[CONTINUE] = while_node
+            body_context[LEAVE] = loop_node
+            body_context[CONTINUE] = loop_node
             body_context[BREAK] = head
             body_node = analyse_statements(stmt.body, body_context)
 
-            while_node._add_edge(NEXT, body_node)
-            stmt_node = while_node
+            loop_node._add_edge(NEXT, body_node)
+            stmt_node = loop_node
+        elif isinstance(stmt, ast.Raise):
+            stmt_node = CFNode({RAISE: context[RAISE]})
         elif isinstance(stmt, ast.Continue):
             stmt_node = CFNode({CONTINUE: context[CONTINUE]})
         elif isinstance(stmt, ast.Break):
@@ -227,6 +221,16 @@ def f():
         self.assertEqual(
             stmt_node.target(RETURN_VALUE), function_context[RETURN_VALUE]
         )
+
+    def test_raise(self):
+        code = """\
+def f():
+    raise TypeError("don't call me")
+"""
+        function_context, stmt_node = self._function_context(code)
+
+        self.assertEqual(stmt_node.edge_names, {RAISE})
+        self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
 
     def test_if(self):
         code = """\
@@ -465,6 +469,72 @@ def f():
         self.assertEqual(body_node2.edge_names, {NEXT, RAISE})
         self.assertEqual(body_node2.target(RAISE), function_context[RAISE])
         self.assertEqual(body_node2.target(NEXT), while_node)
+
+    def test_for_with_continue(self):
+        code = """\
+def f():
+    for item in some_list:
+        if not_interesting:
+            continue
+        do_something()
+    else:
+        do_no_break_stuff()
+"""
+        function_context, for_node = self._function_context(code)
+
+        self.assertEqual(for_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(for_node.target(RAISE), function_context[RAISE])
+
+        test_node = for_node.target(NEXT)
+        self.assertEqual(test_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(test_node.edge_names, {IF, ELSE, RAISE})
+
+        continue_node = test_node.target(IF)
+        self.assertEqual(continue_node.edge_names, {CONTINUE})
+        self.assertEqual(continue_node.target(CONTINUE), for_node)
+
+        body_node = test_node.target(ELSE)
+        self.assertEqual(body_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(body_node.target(NEXT), for_node)
+
+        else_node = for_node.target(ELSE)
+        self.assertEqual(else_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(else_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(else_node.target(NEXT), function_context[LEAVE])
+
+    def test_for_with_break(self):
+        code = """\
+def f():
+    for item in some_list:
+        if not_interesting:
+            break
+        do_something()
+    else:
+        do_no_break_stuff()
+"""
+        function_context, for_node = self._function_context(code)
+
+        self.assertEqual(for_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(for_node.target(RAISE), function_context[RAISE])
+
+        test_node = for_node.target(NEXT)
+        self.assertEqual(test_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(test_node.edge_names, {IF, ELSE, RAISE})
+
+        break_node = test_node.target(IF)
+        self.assertEqual(break_node.edge_names, {BREAK})
+        self.assertEqual(break_node.target(BREAK), function_context[LEAVE])
+
+        body_node = test_node.target(ELSE)
+        self.assertEqual(body_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(body_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(body_node.target(NEXT), for_node)
+
+        else_node = for_node.target(ELSE)
+        self.assertEqual(else_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(else_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(else_node.target(NEXT), function_context[LEAVE])
 
     # Helper methods
 
