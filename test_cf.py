@@ -497,6 +497,81 @@ def f():
         self.assertEqual(pass_node.edge_names, {NEXT})
         self.assertEqual(pass_node.target(NEXT), function_context[LEAVE])
 
+    def test_try_finally_pass(self):
+        code = """\
+def f():
+    try:
+        pass
+    finally:
+        do_something()
+"""
+        function_context, try_node = self._function_context(code)
+
+        self.assertEqual(try_node.edge_names, {NEXT})
+
+        finally_node = try_node.target(NEXT)
+        self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), function_context[LEAVE])
+
+    def test_try_finally_raise(self):
+        code = """\
+def f():
+    try:
+        raise ValueError()
+    finally:
+        do_something()
+"""
+        function_context, try_node = self._function_context(code)
+
+        self.assertEqual(try_node.edge_names, {RAISE})
+
+        finally_node = try_node.target(RAISE)
+        self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), function_context[RAISE])
+
+    def test_try_finally_return(self):
+        code = """\
+def f():
+    try:
+        return
+    finally:
+        do_something()
+"""
+        function_context, try_node = self._function_context(code)
+
+        self.assertEqual(try_node.edge_names, {RETURN})
+
+        finally_node = try_node.target(RETURN)
+        self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), function_context[RETURN])
+
+    def test_try_finally_return_value(self):
+        code = """\
+def f():
+    try:
+        return "abc"
+    finally:
+        do_something()
+"""
+        function_context, try_node = self._function_context(code)
+
+        self.assertEqual(try_node.edge_names, {RAISE, RETURN_VALUE})
+
+        finally_node = try_node.target(RETURN_VALUE)
+        self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(
+            finally_node.target(NEXT), function_context[RETURN_VALUE])
+
+        finally2_node = try_node.target(RAISE)
+        self.assertEqual(finally2_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally2_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(
+            finally2_node.target(NEXT), function_context[RAISE])
+
     # Helper methods
 
     def _node_from_function(self, function_code):

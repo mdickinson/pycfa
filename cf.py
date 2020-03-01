@@ -108,14 +108,46 @@ def analyse_statements(stmts, context):
         elif isinstance(stmt, ast.Break):
             stmt_node = CFNode({BREAK: context[BREAK]})
         elif isinstance(stmt, ast.Try):
-            # As a first step, only handle try-except-else.
-            if stmt.finalbody:
-                raise NotImplementedError("try-finally not yet supported")
+
+            # Process the final clause 4 times, for the 4 different
+            # situations in which it can be invoked.
+
+            # 1st case: leave the finally block normally
+            finally_leave_context = context.copy()
+            finally_leave_context[LEAVE] = head
+            finally_leave_node = analyse_statements(
+                stmt.finalbody, finally_leave_context)
+
+            # 2nd case: on leaving the finally block, re-raise
+            # the exception that caused transfer to finally_raise_context
+            finally_raise_context = context.copy()
+            finally_raise_context[LEAVE] = context[RAISE]
+            finally_raise_node = analyse_statements(
+                stmt.finalbody, finally_raise_context)
+
+            # 3rd case: on leaving the finally block, return a value
+            # XXX We shouldn't create this if the context has no RETURN_VALUE.
+            finally_return_value_context = context.copy()
+            finally_return_value_context[LEAVE] = context[RETURN_VALUE]
+            finally_return_value_node = analyse_statements(
+                stmt.finalbody, finally_return_value_context)
+
+            # 4th case: on leaving the finally block, return.
+            # XXX We shouldn't create this if the context has no RETURN.
+            finally_return_context = context.copy()
+            finally_return_context[LEAVE] = context[RETURN]
+            finally_return_node = analyse_statements(
+                stmt.finalbody, finally_return_context)
 
             handler_context = context.copy()
-            handler_context[LEAVE] = head
+            handler_context[LEAVE] = finally_leave_node
 
-            next_handler = context[RAISE]
+            # XXX test case of return in else or except clause
+            handler_context[RETURN] = finally_return_node
+            handler_context[RETURN_VALUE] = finally_return_value_node
+            handler_context[RAISE] = finally_raise_node
+
+            next_handler = finally_raise_node
             for handler in reversed(stmt.handlers):
                 match_node = analyse_statements(handler.body, handler_context)
                 if handler.type is None:
@@ -123,7 +155,7 @@ def analyse_statements(stmts, context):
                 else:
                     handler_node = CFNode(
                         {
-                            RAISE: context[RAISE],
+                            RAISE: finally_raise_node,
                             MATCH: match_node,
                             NO_MATCH: next_handler,
                         }
@@ -135,6 +167,12 @@ def analyse_statements(stmts, context):
             body_context = context.copy()
             body_context[RAISE] = next_handler
             body_context[LEAVE] = else_handler
+
+            # XXX coverage for case where RETURN is not in context.
+            body_context[RETURN] = finally_return_node
+            # XXX coverage for case where RETURN_VALUE is not in context.
+            body_context[RETURN_VALUE] = finally_return_value_node
+
             body_node = analyse_statements(stmt.body, body_context)
             stmt_node = body_node
         else:
