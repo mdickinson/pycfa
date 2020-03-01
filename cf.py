@@ -18,10 +18,12 @@ ELSE = "else_branch"
 
 # To do: add links from CFNodes to the corresponding AST nodes.
 
+
 class CFNode:
     """
     A node on the control flow graph.
     """
+
     def __init__(self, edges={}):
         # Outward edges for possible control flow transfer.
         self._out = {}
@@ -203,8 +205,7 @@ def f():
         function_context, stmt_node = self._function_context(code)
 
         self.assertEqual(stmt_node.edge_names, {RETURN})
-        self.assertEqual(
-            stmt_node.target(RETURN), function_context[RETURN])
+        self.assertEqual(stmt_node.target(RETURN), function_context[RETURN])
 
     def test_return_with_value(self):
         code = """\
@@ -216,7 +217,8 @@ def f():
         self.assertEqual(stmt_node.edge_names, {RAISE, RETURN_VALUE})
         self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
         self.assertEqual(
-            stmt_node.target(RETURN_VALUE), function_context[RETURN_VALUE])
+            stmt_node.target(RETURN_VALUE), function_context[RETURN_VALUE]
+        )
 
     def test_if(self):
         code = """\
@@ -226,10 +228,8 @@ def f():
 """
         function_context, if_node = self._function_context(code)
 
-        self.assertEqual(
-            if_node.edge_names, {ELSE, IF, RAISE})
-        self.assertEqual(
-            if_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(if_node.edge_names, {ELSE, IF, RAISE})
+        self.assertEqual(if_node.target(RAISE), function_context[RAISE])
 
         if_branch = if_node.target(IF)
         self.assertEqual(if_branch.edge_names, {NEXT, RAISE})
@@ -251,10 +251,8 @@ def f():
 """
         function_context, if_node = self._function_context(code)
 
-        self.assertEqual(
-            if_node.edge_names, {ELSE, IF, RAISE})
-        self.assertEqual(
-            if_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(if_node.edge_names, {ELSE, IF, RAISE})
+        self.assertEqual(if_node.target(RAISE), function_context[RAISE])
 
         if_branch = if_node.target(IF)
         self.assertEqual(if_branch.edge_names, {NEXT, RAISE})
@@ -280,29 +278,25 @@ def f():
 """
         function_context, if_node = self._function_context(code)
         self.assertEqual(
-            if_node.target(IF).edge_names,
-            {RAISE, RETURN_VALUE},
+            if_node.target(IF).edge_names, {RAISE, RETURN_VALUE},
         )
         self.assertEqual(
             if_node.target(IF).target(RETURN_VALUE),
             function_context[RETURN_VALUE],
         )
         self.assertEqual(
-            if_node.target(IF).target(RAISE),
-            function_context[RAISE],
+            if_node.target(IF).target(RAISE), function_context[RAISE],
         )
 
         self.assertEqual(
-            if_node.target(ELSE).edge_names,
-            {RAISE, RETURN_VALUE},
+            if_node.target(ELSE).edge_names, {RAISE, RETURN_VALUE},
         )
         self.assertEqual(
             if_node.target(ELSE).target(RETURN_VALUE),
             function_context[RETURN_VALUE],
         )
         self.assertEqual(
-            if_node.target(ELSE).target(RAISE),
-            function_context[RAISE],
+            if_node.target(ELSE).target(RAISE), function_context[RAISE],
         )
 
     def test_plain_return_in_if_and_else(self):
@@ -315,21 +309,17 @@ def f():
 """
         function_context, if_node = self._function_context(code)
         self.assertEqual(
-            if_node.target(IF).edge_names,
-            {RETURN},
+            if_node.target(IF).edge_names, {RETURN},
         )
         self.assertEqual(
-            if_node.target(IF).target(RETURN),
-            function_context[RETURN],
+            if_node.target(IF).target(RETURN), function_context[RETURN],
         )
 
         self.assertEqual(
-            if_node.target(ELSE).edge_names,
-            {RETURN},
+            if_node.target(ELSE).edge_names, {RETURN},
         )
         self.assertEqual(
-            if_node.target(ELSE).target(RETURN),
-            function_context[RETURN],
+            if_node.target(ELSE).target(RETURN), function_context[RETURN],
         )
 
     def test_unreachable_statements(self):
@@ -346,8 +336,7 @@ def f():
 
         stmt2_node = stmt1_node.target(NEXT)
         self.assertEqual(stmt2_node.edge_names, {RETURN})
-        self.assertEqual(
-            stmt2_node.target(RETURN), function_context[RETURN])
+        self.assertEqual(stmt2_node.target(RETURN), function_context[RETURN])
 
     # Helper methods
 
@@ -355,8 +344,9 @@ def f():
         # Convert a function given as a code snippet to
         # the corresponding AST tree.
         module_node = compile(
-            function_code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        function_node, = module_node.body
+            function_code, "test_cf", "exec", ast.PyCF_ONLY_AST
+        )
+        (function_node,) = module_node.body
         self.assertIsInstance(function_node, ast.FunctionDef)
         return function_node
 
