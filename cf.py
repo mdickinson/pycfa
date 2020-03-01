@@ -45,28 +45,6 @@ class CFNode:
         return self._out[edge_name]
 
 
-def analyse(node, context):
-    """
-    Return analysis for a given node of an AST tree.
-
-    Parameters
-    ----------
-    node : ast.Node
-        Node of an AST tree.
-    context : mapping from string to CFNode
-        Mapping giving context in which this node is being analysed. This
-        includes the nodes that control flow passes to in the event of
-        a return (if within a function), raise or fallthrough (end), and
-        information about any current loop context (for / while) for which
-        a break or continue might make sense.
-
-    Returns
-    -------
-    CFNode
-        Graph node on the control flow graph.
-    """
-
-
 def analyse_statements(stmts, context):
     """
     Analyse control flow for a sequence of statements.
