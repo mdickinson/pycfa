@@ -103,15 +103,10 @@ def analyse_statements(stmts, context):
             merge_node = CFNode()
             merge_node.add_edge(NEXT, head)
 
-            # XXX Should we instead copy the outer context and patch?
-            if_context = {
-                RAISE: context[RAISE],
-                LEAVE: merge_node,
-            }
-            if RETURN_VALUE in context:
-                if_context[RETURN_VALUE] = context[RETURN_VALUE]
-            if RETURN in context:
-                if_context[RETURN] = context[RETURN]
+            # Inherit most of the context from the parent, but patch
+            # the LEAVE entry.
+            if_context = context.copy()
+            if_context[LEAVE] = merge_node
 
             if_enter = analyse_statements(stmt.body, if_context)
             else_enter = analyse_statements(stmt.orelse, if_context)
