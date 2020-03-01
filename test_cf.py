@@ -3,6 +3,13 @@ Analyse control flow for a piece of Python code.
 
 Aid in detection of things like unreachable code.
 """
+# TODO: add links from CFNodes to the corresponding AST nodes.
+# TODO: try/except/else
+# TODO: check that try: <stuff> except: pass doesn't ever raise.
+# TODO: check that try: raise  else: stuff() doesn't ever get to stuff
+# TODO: try/finally
+
+
 import ast
 import unittest
 
@@ -13,6 +20,8 @@ from cf import (
     ELSE,
     IF,
     LEAVE,
+    MATCH,
+    NO_MATCH,
     NEXT,
     RAISE,
     RETURN,
@@ -419,6 +428,32 @@ def f():
         all_okay()
 """
         function_context, try_node = self._function_context(code)
+
+        # starting node is the something_dangerous node; we don't
+        # have a separate node for the "try" itself.
+        self.assertEqual(try_node.edge_names, {NEXT, RAISE})
+
+        except1_node = try_node.target(RAISE)
+        self.assertEqual(except1_node.edge_names, {MATCH, NO_MATCH, RAISE})
+        self.assertEqual(except1_node.target(RAISE), function_context[RAISE])
+
+        match1_node = except1_node.target(MATCH)
+        self.assertEqual(match1_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(match1_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(match1_node.target(NEXT), function_context[LEAVE])
+
+        except2_node = except1_node.target(NO_MATCH)
+        self.assertEqual(except2_node.edge_names, {MATCH})
+
+        match2_node = except2_node.target(MATCH)
+        self.assertEqual(match2_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(match2_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(match2_node.target(NEXT), function_context[LEAVE])
+
+        else_node = try_node.target(NEXT)
+        self.assertEqual(else_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(else_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(else_node.target(NEXT), function_context[LEAVE])
 
     # Helper methods
 

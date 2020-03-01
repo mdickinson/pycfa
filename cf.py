@@ -15,11 +15,8 @@ IF = "if_branch"
 ELSE = "else_branch"
 CONTINUE = "continue"
 BREAK = "break"
-
-
-# TODO: add links from CFNodes to the corresponding AST nodes.
-# TODO: try/finally
-# TODO: try/except/else
+MATCH = "match"  # match for exception clause
+NO_MATCH = "no_match"  # failed match for exception clause
 
 
 class CFNode:
@@ -110,6 +107,36 @@ def analyse_statements(stmts, context):
             stmt_node = CFNode({CONTINUE: context[CONTINUE]})
         elif isinstance(stmt, ast.Break):
             stmt_node = CFNode({BREAK: context[BREAK]})
+        elif isinstance(stmt, ast.Try):
+            # As a first step, only handle try-except-else.
+            if stmt.finalbody:
+                raise NotImplementedError("try-finally not yet supported")
+
+            handler_context = context.copy()
+            handler_context[LEAVE] = head
+
+            next_handler = context[RAISE]
+            for handler in reversed(stmt.handlers):
+                match_node = analyse_statements(handler.body, handler_context)
+                if handler.type is None:
+                    handler_node = CFNode({MATCH: match_node})
+                else:
+                    handler_node = CFNode(
+                        {
+                            RAISE: context[RAISE],
+                            MATCH: match_node,
+                            NO_MATCH: next_handler,
+                        }
+                    )
+                next_handler = handler_node
+
+            else_handler = analyse_statements(stmt.orelse, handler_context)
+
+            body_context = context.copy()
+            body_context[RAISE] = next_handler
+            body_context[LEAVE] = else_handler
+            body_node = analyse_statements(stmt.body, body_context)
+            stmt_node = body_node
         else:
             raise NotImplementedError("Unhandled stmt type", type(stmt))
 
