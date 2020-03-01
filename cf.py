@@ -22,11 +22,13 @@ class CFNode:
     """
     A node on the control flow graph.
     """
-    def __init__(self):
+    def __init__(self, edges={}):
         # Outward edges for possible control flow transfer.
         self._out = {}
+        for name, target in edges.items():
+            self._add_edge(name, target)
 
-    def add_edge(self, name, target):
+    def _add_edge(self, name, target):
         # For now, be careful about overwriting.
         if name in self._out:
             raise ValueError("An edge with that name already exists")
@@ -85,36 +87,35 @@ def analyse_statements(stmts, context):
     head = context[LEAVE]
     for stmt in reversed(stmts):
         if isinstance(stmt, ast.Pass):
-            stmt_node = CFNode()
-            stmt_node.add_edge(NEXT, head)
+            stmt_node = CFNode({NEXT: head})
         elif isinstance(stmt, (ast.Expr, ast.Assign)):
-            stmt_node = CFNode()
-            stmt_node.add_edge(RAISE, context[RAISE])
-            stmt_node.add_edge(NEXT, head)
+            stmt_node = CFNode({RAISE: context[RAISE], NEXT: head})
         elif isinstance(stmt, ast.Return):
-            stmt_node = CFNode()
             if stmt.value is None:
-                stmt_node.add_edge(RETURN, context[RETURN])
+                stmt_node = CFNode({RETURN: context[RETURN]})
             else:
-                stmt_node.add_edge(RAISE, context[RAISE])
-                stmt_node.add_edge(RETURN_VALUE, context[RETURN_VALUE])
+                stmt_node = CFNode(
+                    {
+                        RAISE: context[RAISE],
+                        RETURN_VALUE: context[RETURN_VALUE],
+                    }
+                )
         elif isinstance(stmt, ast.If):
             # Node where the if and else branches are merged.
-            merge_node = CFNode()
-            merge_node.add_edge(NEXT, head)
+            merge_node = CFNode({NEXT: head})
 
             # Inherit most of the context from the parent, but patch
             # the LEAVE entry.
             if_context = context.copy()
             if_context[LEAVE] = merge_node
 
-            if_enter = analyse_statements(stmt.body, if_context)
-            else_enter = analyse_statements(stmt.orelse, if_context)
-
-            stmt_node = CFNode()
-            stmt_node.add_edge(IF, if_enter)
-            stmt_node.add_edge(ELSE, else_enter)
-            stmt_node.add_edge(RAISE, context[RAISE])
+            stmt_node = CFNode(
+                {
+                    IF: analyse_statements(stmt.body, if_context),
+                    ELSE: analyse_statements(stmt.orelse, if_context),
+                    RAISE: context[RAISE],
+                }
+            )
         else:
             raise NotImplementedError("Unhandled stmt type", type(stmt))
 
