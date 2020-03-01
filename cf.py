@@ -36,8 +36,8 @@ class CFNode:
 
     @property
     def edge_names(self):
-        # Names of outward edges.
-        return sorted(self._out.keys())
+        # Names of outward edges, as a set.
+        return set(self._out.keys())
 
     def target(self, edge_name):
         return self._out[edge_name]
@@ -154,7 +154,7 @@ def f():
 """
         function_context, pass_node = self._function_context(code)
 
-        self.assertEqual(pass_node.edge_names, [NEXT])
+        self.assertEqual(pass_node.edge_names, {NEXT})
         self.assertIs(pass_node.target(NEXT), function_context[LEAVE])
 
     def test_analyse_single_expr_statement(self):
@@ -164,7 +164,7 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt_node.edge_names, {NEXT, RAISE})
         self.assertEqual(stmt_node.target(NEXT), function_context[LEAVE])
         self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
 
@@ -175,7 +175,7 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt_node.edge_names, {NEXT, RAISE})
         self.assertEqual(stmt_node.target(NEXT), function_context[LEAVE])
         self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
 
@@ -187,11 +187,11 @@ def f():
 """
         function_context, stmt1_node = self._function_context(code)
 
-        self.assertEqual(stmt1_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt1_node.edge_names, {NEXT, RAISE})
         self.assertEqual(stmt1_node.target(RAISE), function_context[RAISE])
 
         stmt2_node = stmt1_node.target(NEXT)
-        self.assertEqual(stmt2_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt2_node.edge_names, {NEXT, RAISE})
         self.assertEqual(stmt2_node.target(NEXT), function_context[LEAVE])
         self.assertEqual(stmt2_node.target(RAISE), function_context[RAISE])
 
@@ -202,7 +202,7 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, [RETURN])
+        self.assertEqual(stmt_node.edge_names, {RETURN})
         self.assertEqual(
             stmt_node.target(RETURN), function_context[RETURN])
 
@@ -213,7 +213,7 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, [RAISE, RETURN_VALUE])
+        self.assertEqual(stmt_node.edge_names, {RAISE, RETURN_VALUE})
         self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
         self.assertEqual(
             stmt_node.target(RETURN_VALUE), function_context[RETURN_VALUE])
@@ -227,16 +227,16 @@ def f():
         function_context, if_node = self._function_context(code)
 
         self.assertEqual(
-            if_node.edge_names, [ELSE, IF, RAISE])
+            if_node.edge_names, {ELSE, IF, RAISE})
         self.assertEqual(
             if_node.target(RAISE), function_context[RAISE])
 
         if_branch = if_node.target(IF)
-        self.assertEqual(if_branch.edge_names, [NEXT, RAISE])
+        self.assertEqual(if_branch.edge_names, {NEXT, RAISE})
         self.assertEqual(if_branch.target(RAISE), function_context[RAISE])
 
         merge_node = if_branch.target(NEXT)
-        self.assertEqual(merge_node.edge_names, [NEXT])
+        self.assertEqual(merge_node.edge_names, {NEXT})
         self.assertEqual(merge_node.target(NEXT), function_context[LEAVE])
 
         self.assertEqual(if_node.target(ELSE), merge_node)
@@ -252,20 +252,20 @@ def f():
         function_context, if_node = self._function_context(code)
 
         self.assertEqual(
-            if_node.edge_names, [ELSE, IF, RAISE])
+            if_node.edge_names, {ELSE, IF, RAISE})
         self.assertEqual(
             if_node.target(RAISE), function_context[RAISE])
 
         if_branch = if_node.target(IF)
-        self.assertEqual(if_branch.edge_names, [NEXT, RAISE])
+        self.assertEqual(if_branch.edge_names, {NEXT, RAISE})
         self.assertEqual(if_branch.target(RAISE), function_context[RAISE])
 
         else_branch = if_node.target(ELSE)
-        self.assertEqual(else_branch.edge_names, [NEXT, RAISE])
+        self.assertEqual(else_branch.edge_names, {NEXT, RAISE})
         self.assertEqual(else_branch.target(RAISE), function_context[RAISE])
 
         merge_node = if_branch.target(NEXT)
-        self.assertEqual(merge_node.edge_names, [NEXT])
+        self.assertEqual(merge_node.edge_names, {NEXT})
         self.assertEqual(merge_node.target(NEXT), function_context[LEAVE])
 
         self.assertEqual(else_branch.target(NEXT), merge_node)
@@ -281,7 +281,7 @@ def f():
         function_context, if_node = self._function_context(code)
         self.assertEqual(
             if_node.target(IF).edge_names,
-            [RAISE, RETURN_VALUE],
+            {RAISE, RETURN_VALUE},
         )
         self.assertEqual(
             if_node.target(IF).target(RETURN_VALUE),
@@ -294,7 +294,7 @@ def f():
 
         self.assertEqual(
             if_node.target(ELSE).edge_names,
-            [RAISE, RETURN_VALUE],
+            {RAISE, RETURN_VALUE},
         )
         self.assertEqual(
             if_node.target(ELSE).target(RETURN_VALUE),
@@ -316,7 +316,7 @@ def f():
         function_context, if_node = self._function_context(code)
         self.assertEqual(
             if_node.target(IF).edge_names,
-            [RETURN],
+            {RETURN},
         )
         self.assertEqual(
             if_node.target(IF).target(RETURN),
@@ -325,7 +325,7 @@ def f():
 
         self.assertEqual(
             if_node.target(ELSE).edge_names,
-            [RETURN],
+            {RETURN},
         )
         self.assertEqual(
             if_node.target(ELSE).target(RETURN),
@@ -341,11 +341,11 @@ def f():
 """
         function_context, stmt1_node = self._function_context(code)
 
-        self.assertEqual(stmt1_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt1_node.edge_names, {NEXT, RAISE})
         self.assertEqual(stmt1_node.target(RAISE), function_context[RAISE])
 
         stmt2_node = stmt1_node.target(NEXT)
-        self.assertEqual(stmt2_node.edge_names, [RETURN])
+        self.assertEqual(stmt2_node.edge_names, {RETURN})
         self.assertEqual(
             stmt2_node.target(RETURN), function_context[RETURN])
 
@@ -367,10 +367,10 @@ def f():
             sorted(function_context.keys()),
             [LEAVE, RAISE, RETURN, RETURN_VALUE],
         )
-        self.assertEqual(function_context[LEAVE].edge_names, [])
-        self.assertEqual(function_context[RAISE].edge_names, [])
-        self.assertEqual(function_context[RETURN].edge_names, [])
-        self.assertEqual(function_context[RETURN_VALUE].edge_names, [])
+        self.assertEqual(function_context[LEAVE].edge_names, set())
+        self.assertEqual(function_context[RAISE].edge_names, set())
+        self.assertEqual(function_context[RETURN].edge_names, set())
+        self.assertEqual(function_context[RETURN_VALUE].edge_names, set())
 
         return function_context, enter
 
