@@ -81,13 +81,10 @@ def analyse_statements(stmts, context):
                     }
                 )
         elif isinstance(stmt, ast.If):
-            # Node where the if and else branches are merged.
-            merge_node = CFNode({NEXT: head})
-
             # Inherit most of the context from the parent, but patch
             # the LEAVE entry.
             if_context = context.copy()
-            if_context[LEAVE] = merge_node
+            if_context[LEAVE] = head
 
             stmt_node = CFNode(
                 {
@@ -212,12 +209,8 @@ def f():
         if_branch = if_node.target(IF)
         self.assertEqual(if_branch.edge_names, {NEXT, RAISE})
         self.assertEqual(if_branch.target(RAISE), function_context[RAISE])
-
-        merge_node = if_branch.target(NEXT)
-        self.assertEqual(merge_node.edge_names, {NEXT})
-        self.assertEqual(merge_node.target(NEXT), function_context[LEAVE])
-
-        self.assertEqual(if_node.target(ELSE), merge_node)
+        self.assertEqual(if_branch.target(NEXT), function_context[LEAVE])
+        self.assertEqual(if_node.target(ELSE), function_context[LEAVE])
 
     def test_if_else(self):
         code = """\
@@ -235,16 +228,12 @@ def f():
         if_branch = if_node.target(IF)
         self.assertEqual(if_branch.edge_names, {NEXT, RAISE})
         self.assertEqual(if_branch.target(RAISE), function_context[RAISE])
+        self.assertEqual(if_branch.target(NEXT), function_context[LEAVE])
 
         else_branch = if_node.target(ELSE)
         self.assertEqual(else_branch.edge_names, {NEXT, RAISE})
         self.assertEqual(else_branch.target(RAISE), function_context[RAISE])
-
-        merge_node = if_branch.target(NEXT)
-        self.assertEqual(merge_node.edge_names, {NEXT})
-        self.assertEqual(merge_node.target(NEXT), function_context[LEAVE])
-
-        self.assertEqual(else_branch.target(NEXT), merge_node)
+        self.assertEqual(else_branch.target(NEXT), function_context[LEAVE])
 
     def test_return_in_if_and_else(self):
         code = """\
