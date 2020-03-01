@@ -4,8 +4,6 @@ Analyse control flow for a piece of Python code.
 Aid in detection of things like unreachable code.
 """
 # TODO: add links from CFNodes to the corresponding AST nodes.
-# TODO: try/except/else
-# TODO: check that try: <stuff> except: pass doesn't ever raise.
 # TODO: check that try: raise  else: stuff() doesn't ever get to stuff
 # TODO: try/finally
 
@@ -454,6 +452,27 @@ def f():
         self.assertEqual(else_node.edge_names, {NEXT, RAISE})
         self.assertEqual(else_node.target(RAISE), function_context[RAISE])
         self.assertEqual(else_node.target(NEXT), function_context[LEAVE])
+
+    def test_try_except_pass(self):
+        code = """\
+def f():
+    try:
+        something_dangerous()
+    except:
+        pass
+"""
+        function_context, try_node = self._function_context(code)
+
+        # In this case, function_context[RAISE] is not reachable.
+        self.assertEqual(try_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(try_node.target(NEXT), function_context[LEAVE])
+
+        except_node = try_node.target(RAISE)
+        self.assertEqual(except_node.edge_names, {MATCH})
+
+        pass_node = except_node.target(MATCH)
+        self.assertEqual(pass_node.edge_names, {NEXT})
+        self.assertEqual(pass_node.target(NEXT), function_context[LEAVE])
 
     # Helper methods
 
