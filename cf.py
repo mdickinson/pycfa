@@ -6,6 +6,15 @@ Aid in detection of things like unreachable code.
 import ast
 import unittest
 
+# Constants used as edge and context labels.
+RAISE = "raise"
+RETURN = "return"
+RETURN_VALUE = "return_value"
+LEAVE = "leave"
+NEXT = "next"
+IF = "if_branch"
+ELSE = "else_branch"
+
 
 # To do: add links from CFNodes to the corresponding AST nodes.
 
@@ -66,51 +75,51 @@ def analyse_statements(stmts, context):
         Context in which these statements are being analysed.
     """
     # context should _always_ have 'raise' and 'leave' entries
-    # if there's a function context, may also have "return" and
-    # "return_value" entries. If there's a loop context, may
+    # if there's a function context, may also have RETURN and
+    # RETURN_VALUE entries. If there's a loop context, may
     # have additional entries for use with 'break' and 'continue'.
 
     # It's convenient to iterate over statements in reverse, creating
     # a linked list from the last element in the list backwards.
 
-    head = context["leave"]
+    head = context[LEAVE]
     for stmt in reversed(stmts):
         if isinstance(stmt, ast.Pass):
             stmt_node = CFNode()
-            stmt_node.add_edge("next", head)
+            stmt_node.add_edge(NEXT, head)
         elif isinstance(stmt, (ast.Expr, ast.Assign)):
             stmt_node = CFNode()
-            stmt_node.add_edge("raise", context["raise"])
-            stmt_node.add_edge("next", head)
+            stmt_node.add_edge(RAISE, context[RAISE])
+            stmt_node.add_edge(NEXT, head)
         elif isinstance(stmt, ast.Return):
             stmt_node = CFNode()
             if stmt.value is None:
-                stmt_node.add_edge("return", context["return"])
+                stmt_node.add_edge(RETURN, context[RETURN])
             else:
-                stmt_node.add_edge("raise", context["raise"])
-                stmt_node.add_edge("return_value", context["return_value"])
+                stmt_node.add_edge(RAISE, context[RAISE])
+                stmt_node.add_edge(RETURN_VALUE, context[RETURN_VALUE])
         elif isinstance(stmt, ast.If):
             # Node where the if and else branches are merged.
             merge_node = CFNode()
-            merge_node.add_edge("next", head)
+            merge_node.add_edge(NEXT, head)
 
             # XXX Should we instead copy the outer context and patch?
             if_context = {
-                "raise": context["raise"],
-                "leave": merge_node,
+                RAISE: context[RAISE],
+                LEAVE: merge_node,
             }
-            if "return_value" in context:
-                if_context["return_value"] = context["return_value"]
-            if "return" in context:
-                if_context["return"] = context["return"]
+            if RETURN_VALUE in context:
+                if_context[RETURN_VALUE] = context[RETURN_VALUE]
+            if RETURN in context:
+                if_context[RETURN] = context[RETURN]
 
             if_enter = analyse_statements(stmt.body, if_context)
             else_enter = analyse_statements(stmt.orelse, if_context)
 
             stmt_node = CFNode()
-            stmt_node.add_edge("if_branch", if_enter)
-            stmt_node.add_edge("else_branch", else_enter)
-            stmt_node.add_edge("raise", context["raise"])
+            stmt_node.add_edge(IF, if_enter)
+            stmt_node.add_edge(ELSE, else_enter)
+            stmt_node.add_edge(RAISE, context[RAISE])
         else:
             raise NotImplementedError("Unhandled stmt type", type(stmt))
 
@@ -132,10 +141,10 @@ def analyse_function(ast_node):
         and the various exit points.
     """
     context = {
-        "raise": CFNode(),
-        "return_value": CFNode(),  # node for 'return <expr>'
-        "return": CFNode(),  # node for plain valueless return
-        "leave": CFNode(),  # node for leaving by falling off the end
+        RAISE: CFNode(),
+        RETURN_VALUE: CFNode(),  # node for 'return <expr>'
+        RETURN: CFNode(),  # node for plain valueless return
+        LEAVE: CFNode(),  # node for leaving by falling off the end
     }
     enter = analyse_statements(ast_node.body, context)
     return context, enter
@@ -149,8 +158,8 @@ def f():
 """
         function_context, pass_node = self._function_context(code)
 
-        self.assertEqual(pass_node.edge_names, ["next"])
-        self.assertIs(pass_node.target("next"), function_context["leave"])
+        self.assertEqual(pass_node.edge_names, [NEXT])
+        self.assertIs(pass_node.target(NEXT), function_context[LEAVE])
 
     def test_analyse_single_expr_statement(self):
         code = """\
@@ -159,9 +168,9 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, ["next", "raise"])
-        self.assertEqual(stmt_node.target("next"), function_context["leave"])
-        self.assertEqual(stmt_node.target("raise"), function_context["raise"])
+        self.assertEqual(stmt_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt_node.target(NEXT), function_context[LEAVE])
+        self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
 
     def test_analyse_assign(self):
         code = """\
@@ -170,9 +179,9 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, ["next", "raise"])
-        self.assertEqual(stmt_node.target("next"), function_context["leave"])
-        self.assertEqual(stmt_node.target("raise"), function_context["raise"])
+        self.assertEqual(stmt_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt_node.target(NEXT), function_context[LEAVE])
+        self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
 
     def test_analyse_multiple_statements(self):
         code = """\
@@ -182,13 +191,13 @@ def f():
 """
         function_context, stmt1_node = self._function_context(code)
 
-        self.assertEqual(stmt1_node.edge_names, ["next", "raise"])
-        self.assertEqual(stmt1_node.target("raise"), function_context["raise"])
+        self.assertEqual(stmt1_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt1_node.target(RAISE), function_context[RAISE])
 
-        stmt2_node = stmt1_node.target("next")
-        self.assertEqual(stmt2_node.edge_names, ["next", "raise"])
-        self.assertEqual(stmt2_node.target("next"), function_context["leave"])
-        self.assertEqual(stmt2_node.target("raise"), function_context["raise"])
+        stmt2_node = stmt1_node.target(NEXT)
+        self.assertEqual(stmt2_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt2_node.target(NEXT), function_context[LEAVE])
+        self.assertEqual(stmt2_node.target(RAISE), function_context[RAISE])
 
     def test_return_with_no_value(self):
         code = """\
@@ -197,9 +206,9 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, ["return"])
+        self.assertEqual(stmt_node.edge_names, [RETURN])
         self.assertEqual(
-            stmt_node.target("return"), function_context["return"])
+            stmt_node.target(RETURN), function_context[RETURN])
 
     def test_return_with_value(self):
         code = """\
@@ -208,10 +217,10 @@ def f():
 """
         function_context, stmt_node = self._function_context(code)
 
-        self.assertEqual(stmt_node.edge_names, ["raise", "return_value"])
-        self.assertEqual(stmt_node.target("raise"), function_context["raise"])
+        self.assertEqual(stmt_node.edge_names, [RAISE, RETURN_VALUE])
+        self.assertEqual(stmt_node.target(RAISE), function_context[RAISE])
         self.assertEqual(
-            stmt_node.target("return_value"), function_context["return_value"])
+            stmt_node.target(RETURN_VALUE), function_context[RETURN_VALUE])
 
     def test_if(self):
         code = """\
@@ -222,19 +231,19 @@ def f():
         function_context, if_node = self._function_context(code)
 
         self.assertEqual(
-            if_node.edge_names, ["else_branch", "if_branch", "raise"])
+            if_node.edge_names, [ELSE, IF, RAISE])
         self.assertEqual(
-            if_node.target("raise"), function_context["raise"])
+            if_node.target(RAISE), function_context[RAISE])
 
-        if_branch = if_node.target("if_branch")
-        self.assertEqual(if_branch.edge_names, ["next", "raise"])
-        self.assertEqual(if_branch.target("raise"), function_context["raise"])
+        if_branch = if_node.target(IF)
+        self.assertEqual(if_branch.edge_names, [NEXT, RAISE])
+        self.assertEqual(if_branch.target(RAISE), function_context[RAISE])
 
-        merge_node = if_branch.target("next")
-        self.assertEqual(merge_node.edge_names, ["next"])
-        self.assertEqual(merge_node.target("next"), function_context["leave"])
+        merge_node = if_branch.target(NEXT)
+        self.assertEqual(merge_node.edge_names, [NEXT])
+        self.assertEqual(merge_node.target(NEXT), function_context[LEAVE])
 
-        self.assertEqual(if_node.target("else_branch"), merge_node)
+        self.assertEqual(if_node.target(ELSE), merge_node)
 
     def test_if_else(self):
         code = """\
@@ -247,23 +256,23 @@ def f():
         function_context, if_node = self._function_context(code)
 
         self.assertEqual(
-            if_node.edge_names, ["else_branch", "if_branch", "raise"])
+            if_node.edge_names, [ELSE, IF, RAISE])
         self.assertEqual(
-            if_node.target("raise"), function_context["raise"])
+            if_node.target(RAISE), function_context[RAISE])
 
-        if_branch = if_node.target("if_branch")
-        self.assertEqual(if_branch.edge_names, ["next", "raise"])
-        self.assertEqual(if_branch.target("raise"), function_context["raise"])
+        if_branch = if_node.target(IF)
+        self.assertEqual(if_branch.edge_names, [NEXT, RAISE])
+        self.assertEqual(if_branch.target(RAISE), function_context[RAISE])
 
-        else_branch = if_node.target("else_branch")
-        self.assertEqual(else_branch.edge_names, ["next", "raise"])
-        self.assertEqual(else_branch.target("raise"), function_context["raise"])
+        else_branch = if_node.target(ELSE)
+        self.assertEqual(else_branch.edge_names, [NEXT, RAISE])
+        self.assertEqual(else_branch.target(RAISE), function_context[RAISE])
 
-        merge_node = if_branch.target("next")
-        self.assertEqual(merge_node.edge_names, ["next"])
-        self.assertEqual(merge_node.target("next"), function_context["leave"])
+        merge_node = if_branch.target(NEXT)
+        self.assertEqual(merge_node.edge_names, [NEXT])
+        self.assertEqual(merge_node.target(NEXT), function_context[LEAVE])
 
-        self.assertEqual(else_branch.target("next"), merge_node)
+        self.assertEqual(else_branch.target(NEXT), merge_node)
 
     def test_return_in_if_and_else(self):
         code = """\
@@ -275,29 +284,29 @@ def f():
 """
         function_context, if_node = self._function_context(code)
         self.assertEqual(
-            if_node.target("if_branch").edge_names,
-            ["raise", "return_value"],
+            if_node.target(IF).edge_names,
+            [RAISE, RETURN_VALUE],
         )
         self.assertEqual(
-            if_node.target("if_branch").target("return_value"),
-            function_context["return_value"],
+            if_node.target(IF).target(RETURN_VALUE),
+            function_context[RETURN_VALUE],
         )
         self.assertEqual(
-            if_node.target("if_branch").target("raise"),
-            function_context["raise"],
+            if_node.target(IF).target(RAISE),
+            function_context[RAISE],
         )
 
         self.assertEqual(
-            if_node.target("else_branch").edge_names,
-            ["raise", "return_value"],
+            if_node.target(ELSE).edge_names,
+            [RAISE, RETURN_VALUE],
         )
         self.assertEqual(
-            if_node.target("else_branch").target("return_value"),
-            function_context["return_value"],
+            if_node.target(ELSE).target(RETURN_VALUE),
+            function_context[RETURN_VALUE],
         )
         self.assertEqual(
-            if_node.target("else_branch").target("raise"),
-            function_context["raise"],
+            if_node.target(ELSE).target(RAISE),
+            function_context[RAISE],
         )
 
     def test_plain_return_in_if_and_else(self):
@@ -310,21 +319,21 @@ def f():
 """
         function_context, if_node = self._function_context(code)
         self.assertEqual(
-            if_node.target("if_branch").edge_names,
-            ["return"],
+            if_node.target(IF).edge_names,
+            [RETURN],
         )
         self.assertEqual(
-            if_node.target("if_branch").target("return"),
-            function_context["return"],
+            if_node.target(IF).target(RETURN),
+            function_context[RETURN],
         )
 
         self.assertEqual(
-            if_node.target("else_branch").edge_names,
-            ["return"],
+            if_node.target(ELSE).edge_names,
+            [RETURN],
         )
         self.assertEqual(
-            if_node.target("else_branch").target("return"),
-            function_context["return"],
+            if_node.target(ELSE).target(RETURN),
+            function_context[RETURN],
         )
 
     def test_unreachable_statements(self):
@@ -336,13 +345,13 @@ def f():
 """
         function_context, stmt1_node = self._function_context(code)
 
-        self.assertEqual(stmt1_node.edge_names, ["next", "raise"])
-        self.assertEqual(stmt1_node.target("raise"), function_context["raise"])
+        self.assertEqual(stmt1_node.edge_names, [NEXT, RAISE])
+        self.assertEqual(stmt1_node.target(RAISE), function_context[RAISE])
 
-        stmt2_node = stmt1_node.target("next")
-        self.assertEqual(stmt2_node.edge_names, ["return"])
+        stmt2_node = stmt1_node.target(NEXT)
+        self.assertEqual(stmt2_node.edge_names, [RETURN])
         self.assertEqual(
-            stmt2_node.target("return"), function_context["return"])
+            stmt2_node.target(RETURN), function_context[RETURN])
 
     # Helper methods
 
@@ -360,13 +369,12 @@ def f():
         function_context, enter = analyse_function(ast_node)
         self.assertEqual(
             sorted(function_context.keys()),
-            ["leave", "raise", "return", "return_value"],
+            [LEAVE, RAISE, RETURN, RETURN_VALUE],
         )
-        self.assertEqual(function_context["leave"].edge_names, [])
-        self.assertEqual(function_context["raise"].edge_names, [])
-        self.assertEqual(function_context["return"].edge_names, [])
-        self.assertEqual(function_context["return_value"].edge_names, [])
-        # self.assertEqual(function_context["enter"].edge_names, ["next"])
+        self.assertEqual(function_context[LEAVE].edge_names, [])
+        self.assertEqual(function_context[RAISE].edge_names, [])
+        self.assertEqual(function_context[RETURN].edge_names, [])
+        self.assertEqual(function_context[RETURN_VALUE].edge_names, [])
 
         return function_context, enter
 
