@@ -3,11 +3,15 @@ Analyse control flow for a piece of Python code.
 
 Aid in detection of things like unreachable code.
 """
+
+# TODO: add and use assertEdges method.
+# TODO: use context in place of function_context.
 # TODO: add links from CFNodes to the corresponding AST nodes.
 # TODO: try/finally
 # TODO: CFGraph object, containing both nodes and edges. (This
 #       will allow easier detection of unreachable statements.)
 # TODO: Better context management (more functional).
+# TODO: Remove function context from code snippets where it's not needed.
 
 
 import ast
@@ -15,7 +19,9 @@ import unittest
 
 from cf import (
     analyse_function,
+    analyse_statements,
     BREAK,
+    CFNode,
     CONTINUE,
     ELSE,
     IF,
@@ -620,6 +626,129 @@ def f():
         self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
         self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
         self.assertEqual(finally_node.target(NEXT), for_node)
+
+    def test_return_value_in_finally(self):
+        code = """\
+def f():
+    try:
+        raise SomeException()
+    finally:
+        return some_value()
+"""
+        function_context, raise_node = self._function_context(code)
+
+        self.assertEqual(raise_node.edge_names, {RAISE})
+
+        return_node = raise_node.target(RAISE)
+        self.assertEqual(return_node.edge_names, {RAISE, RETURN_VALUE})
+        self.assertEqual(
+            return_node.target(RETURN_VALUE), function_context[RETURN_VALUE]
+        )
+        self.assertEqual(return_node.target(RAISE), function_context[RAISE])
+
+    def test_return_in_finally(self):
+        code = """\
+def f():
+    try:
+        raise SomeException()
+    finally:
+        return
+"""
+        function_context, raise_node = self._function_context(code)
+
+        self.assertEqual(raise_node.edge_names, {RAISE})
+
+        return_node = raise_node.target(RAISE)
+        self.assertEqual(return_node.edge_names, {RETURN})
+        self.assertEqual(return_node.target(RETURN), function_context[RETURN])
+
+    def test_raise_in_finally(self):
+        code = """\
+def f():
+    try:
+        pass
+    finally:
+        raise SomeException()
+"""
+        function_context, pass_node = self._function_context(code)
+
+        self.assertEqual(pass_node.edge_names, {NEXT})
+
+        raise_node = pass_node.target(NEXT)
+        self.assertEqual(raise_node.edge_names, {RAISE})
+        self.assertEqual(raise_node.target(RAISE), function_context[RAISE])
+
+    def test_break_in_finally(self):
+        code = """\
+def f():
+    for item in item_factory():
+        try:
+            # will be superseded by the break in the finally
+            return
+        finally:
+            break
+"""
+        context, for_node = self._function_context(code)
+
+        self.assertEdges(for_node, {ELSE, NEXT, RAISE})
+        self.assertEqual(for_node.target(ELSE), context[LEAVE])
+        self.assertEqual(for_node.target(RAISE), context[RAISE])
+
+        return_node = for_node.target(NEXT)
+        self.assertEdges(return_node, {RETURN})
+
+        break_node = return_node.target(RETURN)
+        self.assertEdges(break_node, {BREAK})
+        self.assertEqual(break_node.target(BREAK), context[LEAVE])
+
+    def test_continue_in_finally(self):
+        code = """\
+def f():
+    for item in item_factory():
+        try:
+            # will be superseded by the continue in the finally
+            raise SomeException()
+        finally:
+            continue
+"""
+        context, for_node = self._function_context(code)
+
+        self.assertEdges(for_node, {ELSE, NEXT, RAISE})
+        self.assertEqual(for_node.target(ELSE), context[LEAVE])
+        self.assertEqual(for_node.target(RAISE), context[RAISE])
+
+        raise_node = for_node.target(NEXT)
+        self.assertEdges(raise_node, {RAISE})
+
+        continue_node = raise_node.target(RAISE)
+        self.assertEdges(continue_node, {CONTINUE})
+        self.assertEqual(continue_node.target(CONTINUE), for_node)
+
+    def test_statements_outside_function(self):
+        code = """\
+a = calculate()
+try:
+    something()
+except:
+    pass
+"""
+        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        context = {
+            LEAVE: CFNode(),
+            RAISE: CFNode(),
+        }
+        assign_node = analyse_statements(module_node.body, context)
+
+        self.assertEqual(assign_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(assign_node.target(RAISE), context[RAISE])
+
+    # Assertions
+
+    def assertEdges(self, node, edges):
+        """
+        Assert that the outward edges from a node have the given names.
+        """
+        self.assertEqual(node.edge_names, edges)
 
     # Helper methods
 
