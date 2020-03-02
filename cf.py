@@ -109,40 +109,47 @@ def analyse_statements(stmts, context):
             stmt_node = CFNode({BREAK: context[BREAK]})
         elif isinstance(stmt, ast.Try):
 
-            # Process the final clause 4 times, for the 4 different
+            # Process the finally clause 4 times, for the 4 different
             # situations in which it can be invoked.
 
             # 1st case: leave the finally block normally
             finally_leave_context = context.copy()
             finally_leave_context[LEAVE] = head
             finally_leave_node = analyse_statements(
-                stmt.finalbody, finally_leave_context)
+                stmt.finalbody, finally_leave_context
+            )
 
             # 2nd case: on leaving the finally block, re-raise
             # the exception that caused transfer to finally_raise_context
             finally_raise_context = context.copy()
             finally_raise_context[LEAVE] = context[RAISE]
             finally_raise_node = analyse_statements(
-                stmt.finalbody, finally_raise_context)
+                stmt.finalbody, finally_raise_context
+            )
 
             # 3rd case: on leaving the finally block, return a value
             # XXX We shouldn't create this if the context has no RETURN_VALUE.
             finally_return_value_context = context.copy()
             finally_return_value_context[LEAVE] = context[RETURN_VALUE]
             finally_return_value_node = analyse_statements(
-                stmt.finalbody, finally_return_value_context)
+                stmt.finalbody, finally_return_value_context
+            )
 
             # 4th case: on leaving the finally block, return.
             # XXX We shouldn't create this if the context has no RETURN.
+            # XXX Add test for case where context has no RETURN.
             finally_return_context = context.copy()
             finally_return_context[LEAVE] = context[RETURN]
             finally_return_node = analyse_statements(
-                stmt.finalbody, finally_return_context)
+                stmt.finalbody, finally_return_context
+            )
+
+            # XXX Do we also need cases for break and continue?
 
             handler_context = context.copy()
             handler_context[LEAVE] = finally_leave_node
 
-            # XXX test case of return in else or except clause
+            # XXX test case of return or raise in else or except clause
             handler_context[RETURN] = finally_return_node
             handler_context[RETURN_VALUE] = finally_return_value_node
             handler_context[RAISE] = finally_raise_node
@@ -164,17 +171,10 @@ def analyse_statements(stmts, context):
 
             else_handler = analyse_statements(stmt.orelse, handler_context)
 
-            body_context = context.copy()
+            body_context = handler_context.copy()
             body_context[RAISE] = next_handler
             body_context[LEAVE] = else_handler
-
-            # XXX coverage for case where RETURN is not in context.
-            body_context[RETURN] = finally_return_node
-            # XXX coverage for case where RETURN_VALUE is not in context.
-            body_context[RETURN_VALUE] = finally_return_value_node
-
-            body_node = analyse_statements(stmt.body, body_context)
-            stmt_node = body_node
+            stmt_node = analyse_statements(stmt.body, body_context)
         else:
             raise NotImplementedError("Unhandled stmt type", type(stmt))
 
