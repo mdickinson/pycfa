@@ -16,6 +16,7 @@ RETURN_VALUE = "return_value"
 # Constants used only as edge labels.
 IF = "if"
 ELSE = "else"
+ENTER = "enter"
 MATCH = "match"
 NO_MATCH = "no_match"
 
@@ -108,7 +109,7 @@ def analyse_for_or_while(statement: ast.stmt, context: dict) -> CFNode:
     body_context[NEXT] = loop_node
     body_node = analyse_statements(statement.body, body_context)
 
-    loop_node.add_edge(NEXT, body_node)
+    loop_node.add_edge(ENTER, body_node)
     return loop_node
 
 
