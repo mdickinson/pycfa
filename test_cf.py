@@ -5,6 +5,9 @@ Aid in detection of things like unreachable code.
 """
 # TODO: add links from CFNodes to the corresponding AST nodes.
 # TODO: try/finally
+# TODO: CFGraph object, containing both nodes and edges. (This
+#       will allow easier detection of unreachable statements.)
+# TODO: Better context management (more functional).
 
 
 import ast
@@ -564,13 +567,59 @@ def f():
         self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
         self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
         self.assertEqual(
-            finally_node.target(NEXT), function_context[RETURN_VALUE])
+            finally_node.target(NEXT), function_context[RETURN_VALUE]
+        )
 
         finally2_node = try_node.target(RAISE)
         self.assertEqual(finally2_node.edge_names, {NEXT, RAISE})
         self.assertEqual(finally2_node.target(RAISE), function_context[RAISE])
-        self.assertEqual(
-            finally2_node.target(NEXT), function_context[RAISE])
+        self.assertEqual(finally2_node.target(NEXT), function_context[RAISE])
+
+    def test_try_finally_break(self):
+        code = """\
+def f():
+    for item in items:
+        try:
+            break
+        finally:
+            do_something()
+"""
+        function_context, for_node = self._function_context(code)
+
+        self.assertEqual(for_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(for_node.target(ELSE), function_context[LEAVE])
+        self.assertEqual(for_node.target(RAISE), function_context[RAISE])
+
+        try_node = for_node.target(NEXT)
+        self.assertEqual(try_node.edge_names, {BREAK})
+
+        finally_node = try_node.target(BREAK)
+        self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), function_context[LEAVE])
+
+    def test_try_finally_continue(self):
+        code = """\
+def f():
+    for item in items:
+        try:
+            continue
+        finally:
+            do_something()
+"""
+        function_context, for_node = self._function_context(code)
+
+        self.assertEqual(for_node.edge_names, {ELSE, NEXT, RAISE})
+        self.assertEqual(for_node.target(ELSE), function_context[LEAVE])
+        self.assertEqual(for_node.target(RAISE), function_context[RAISE])
+
+        try_node = for_node.target(NEXT)
+        self.assertEqual(try_node.edge_names, {CONTINUE})
+
+        finally_node = try_node.target(CONTINUE)
+        self.assertEqual(finally_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), function_context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), for_node)
 
     # Helper methods
 

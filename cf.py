@@ -144,6 +144,22 @@ def analyse_statements(stmts, context):
                 stmt.finalbody, finally_return_context
             )
 
+            # 5th case: on leaving the finally block, break.
+            if BREAK in context:
+                finally_break_context = context.copy()
+                finally_break_context[LEAVE] = context[BREAK]
+                finally_break_node = analyse_statements(
+                    stmt.finalbody, finally_break_context
+                )
+
+            # 6th case: on leaving the finally block, continue
+            if CONTINUE in context:
+                finally_continue_context = context.copy()
+                finally_continue_context[LEAVE] = context[CONTINUE]
+                finally_continue_node = analyse_statements(
+                    stmt.finalbody, finally_continue_context
+                )
+
             # XXX Do we also need cases for break and continue?
 
             handler_context = context.copy()
@@ -153,6 +169,12 @@ def analyse_statements(stmts, context):
             handler_context[RETURN] = finally_return_node
             handler_context[RETURN_VALUE] = finally_return_value_node
             handler_context[RAISE] = finally_raise_node
+
+            if BREAK in context:
+                handler_context[BREAK] = finally_break_node
+
+            if CONTINUE in context:
+                handler_context[CONTINUE] = finally_continue_node
 
             next_handler = finally_raise_node
             for handler in reversed(stmt.handlers):
