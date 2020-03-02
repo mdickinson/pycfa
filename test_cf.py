@@ -12,6 +12,7 @@ Aid in detection of things like unreachable code.
 #       will allow easier detection of unreachable statements.)
 # TODO: Better context management (more functional).
 # TODO: Remove function context from code snippets where it's not needed.
+# TODO: test case of return/raise/break/continue in else or except clause
 
 
 import ast

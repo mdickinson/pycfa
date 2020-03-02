@@ -5,18 +5,20 @@ Aid in detection of things like unreachable code.
 """
 import ast
 
-# Constants used as edge and context labels.
+# Constants used as both edge and context labels.
+BREAK = "break"
+CONTINUE = "continue"
+LEAVE = "leave"
 RAISE = "raise"
 RETURN = "return"
 RETURN_VALUE = "return_value"
-LEAVE = "leave"
-NEXT = "next"
-IF = "if_branch"
-ELSE = "else_branch"
-CONTINUE = "continue"
-BREAK = "break"
-MATCH = "match"  # match for exception clause
-NO_MATCH = "no_match"  # failed match for exception clause
+
+# Constants used only as edge labels.
+NEXT = "next"  # XXX could possibly combine with LEAVE
+IF = "if"
+ELSE = "else"
+MATCH = "match"
+NO_MATCH = "no_match"
 
 
 class CFNode:
@@ -45,7 +47,167 @@ class CFNode:
         return self._out[edge_name]
 
 
-def analyse_statements(stmts, context):
+def analyse_simple(statement: ast.stmt, context: dict) -> CFNode:
+    """
+    Analyse a simple statement not involving control flow.
+    """
+    return CFNode({RAISE: context[RAISE], NEXT: context[LEAVE]})
+
+
+def analyse_pass(statement: ast.Pass, context: dict) -> CFNode:
+    """
+    Analyse a pass statement.
+    """
+    return CFNode({NEXT: context[LEAVE]})
+
+
+def analyse_return(statement: ast.Return, context: dict) -> CFNode:
+    """
+    Analyse a return statement.
+    """
+    if statement.value is None:
+        return CFNode({RETURN: context[RETURN]})
+    else:
+        return CFNode(
+            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]}
+        )
+
+
+def analyse_if(statement: ast.If, context: dict) -> CFNode:
+    """
+    Analyse an if statement.
+    """
+    return CFNode(
+        {
+            IF: analyse_statements(statement.body, context),
+            ELSE: analyse_statements(statement.orelse, context),
+            RAISE: context[RAISE],
+        }
+    )
+
+
+def analyse_for_or_while(statement: ast.stmt, context: dict) -> CFNode:
+    """
+    Analyse a for or while statement.
+    """
+    loop_node = CFNode(
+        {
+            RAISE: context[RAISE],
+            ELSE: analyse_statements(statement.orelse, context),
+            # Also needs a NEXT edge, but we don't have anything
+            # to attach it to yet.
+            # XXX or should "NEXT" be called something else here?
+            # "BODY"? "ENTER"?
+        }
+    )
+
+    # Body context introduces new BREAK and CONTINUE targets, and
+    # leaving the body means returning to the start of the loop.
+    body_context = context.copy()
+    body_context[BREAK] = context[LEAVE]
+    body_context[CONTINUE] = loop_node
+    body_context[LEAVE] = loop_node
+    body_node = analyse_statements(statement.body, body_context)
+
+    loop_node.add_edge(NEXT, body_node)
+    return loop_node
+
+
+def analyse_raise(statement: ast.Raise, context: dict) -> CFNode:
+    """
+    Analyse a raise statement.
+    """
+    return CFNode({RAISE: context[RAISE]})
+
+
+def analyse_break(statement: ast.Break, context: dict) -> CFNode:
+    """
+    Analyse a break statement.
+    """
+    return CFNode({BREAK: context[BREAK]})
+
+
+def analyse_continue(statement: ast.Continue, context: dict) -> CFNode:
+    """
+    Analyse a continue statement.
+    """
+    return CFNode({CONTINUE: context[CONTINUE]})
+
+
+def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
+    """
+    Analyse the try-except-else part of a try statement.
+    """
+    else_handler = analyse_statements(statement.orelse, context)
+
+    # Process handlers, backwards: if the last handler doesn't match, raise.
+    next_handler = context[RAISE]
+    for handler in reversed(statement.handlers):
+        match_node = analyse_statements(handler.body, context)
+        if handler.type is None:
+            handler_node = CFNode({MATCH: match_node})
+        else:
+            handler_node = CFNode(
+                {
+                    RAISE: context[RAISE],
+                    MATCH: match_node,
+                    NO_MATCH: next_handler,
+                }
+            )
+        next_handler = handler_node
+
+    # The body of the try clause passes control to the else clause
+    # on leaving normally, and to the handler chain on raise.
+    body_context = context.copy()
+    body_context[RAISE] = next_handler
+    body_context[LEAVE] = else_handler
+    return analyse_statements(statement.body, body_context)
+
+
+def analyse_try(statement: ast.Try, context: dict) -> CFNode:
+    """
+    Analyse a try statement.
+    """
+    handler_context = context.copy()
+
+    # We process the finally block several times, with a different LEAVE target
+    # each time. A break / continue / raise / return in any of the try, except
+    # or else blocks will transfer control to the finally block, and then on
+    # leaving the finally block, will transfer control back to whereever it
+    # would have gone without the finally. Similarly, leaving the
+    # try/except/else compound normally again transfers control to the finally
+    # block, and then on leaving the finally, transfers control to wherever we
+    # would have gone if the finally were not present.
+
+    for node_type in [BREAK, CONTINUE, LEAVE, RAISE, RETURN, RETURN_VALUE]:
+        if node_type in context:
+            finally_context = context.copy()
+            finally_context[LEAVE] = context[node_type]
+            handler_context[node_type] = analyse_statements(
+                statement.finalbody, finally_context
+            )
+
+    return _analyse_try_except_else(statement, handler_context)
+
+
+# Mapping from statement types to the functions that can analyse them.
+
+analysers = {
+    ast.Assign: analyse_simple,
+    ast.Break: analyse_break,
+    ast.Continue: analyse_continue,
+    ast.Expr: analyse_simple,
+    ast.For: analyse_for_or_while,
+    ast.If: analyse_if,
+    ast.Pass: analyse_pass,
+    ast.Raise: analyse_raise,
+    ast.Return: analyse_return,
+    ast.Try: analyse_try,
+    ast.While: analyse_for_or_while,
+}
+
+
+def analyse_statements(stmts: list, context: dict) -> CFNode:
     """
     Analyse control flow for a sequence of statements.
 
@@ -59,141 +221,23 @@ def analyse_statements(stmts, context):
         may be provided, depending on context: RETURN and RETURN_VALUE
         if within a function context, and BREAK and CONTINUE if within
         a loop context.
+
+    Returns
+    -------
+    CFNode
+        Node corresponding to the first statement in the statement list.
+        (If the statement list is empty, the LEAVE node from the context
+        will be returned.)
     """
     # It's convenient to iterate over statements in reverse, creating
     # a linked list from the last element in the list backwards.
 
     head = context[LEAVE]
     for stmt in reversed(stmts):
-        if isinstance(stmt, ast.Pass):
-            stmt_node = CFNode({NEXT: head})
-        elif isinstance(stmt, (ast.Expr, ast.Assign)):
-            stmt_node = CFNode({RAISE: context[RAISE], NEXT: head})
-        elif isinstance(stmt, ast.Return):
-            if stmt.value is None:
-                stmt_node = CFNode({RETURN: context[RETURN]})
-            else:
-                stmt_node = CFNode(
-                    {
-                        RAISE: context[RAISE],
-                        RETURN_VALUE: context[RETURN_VALUE],
-                    }
-                )
-        elif isinstance(stmt, ast.If):
-            if_context = context.copy()
-            if_context[LEAVE] = head
-
-            stmt_node = CFNode(
-                {
-                    IF: analyse_statements(stmt.body, if_context),
-                    ELSE: analyse_statements(stmt.orelse, if_context),
-                    RAISE: context[RAISE],
-                }
-            )
-        elif isinstance(stmt, (ast.For, ast.While)):
-            else_context = context.copy()
-            else_context[LEAVE] = head
-            else_node = analyse_statements(stmt.orelse, else_context)
-
-            loop_node = CFNode({RAISE: context[RAISE], ELSE: else_node})
-
-            body_context = context.copy()
-            body_context[LEAVE] = loop_node
-            body_context[CONTINUE] = loop_node
-            body_context[BREAK] = head
-            body_node = analyse_statements(stmt.body, body_context)
-
-            loop_node.add_edge(NEXT, body_node)
-            stmt_node = loop_node
-        elif isinstance(stmt, ast.Raise):
-            stmt_node = CFNode({RAISE: context[RAISE]})
-        elif isinstance(stmt, ast.Continue):
-            stmt_node = CFNode({CONTINUE: context[CONTINUE]})
-        elif isinstance(stmt, ast.Break):
-            stmt_node = CFNode({BREAK: context[BREAK]})
-        elif isinstance(stmt, ast.Try):
-
-            # Process the finally clause 6 times, for the 6 different
-            # situations in which it can be invoked. These are different
-            # because the LEAVE of the evaluation context is different
-            # in each case.
-
-            handler_context = context.copy()
-
-            # 1st case: leave the finally block normally
-            finally_leave_context = context.copy()
-            finally_leave_context[LEAVE] = head
-            handler_context[LEAVE] = analyse_statements(
-                stmt.finalbody, finally_leave_context
-            )
-
-            # 2nd case: on leaving the finally block, re-raise
-            # the exception that caused transfer to finally_raise_context
-            finally_raise_context = context.copy()
-            finally_raise_context[LEAVE] = context[RAISE]
-            handler_context[RAISE] = analyse_statements(
-                stmt.finalbody, finally_raise_context
-            )
-
-            # 3rd case: on leaving the finally block, return a value
-            if RETURN_VALUE in context:
-                finally_return_value_context = context.copy()
-                finally_return_value_context[LEAVE] = context[RETURN_VALUE]
-                handler_context[RETURN_VALUE] = analyse_statements(
-                    stmt.finalbody, finally_return_value_context
-                )
-
-            # 4th case: on leaving the finally block, return.
-            if RETURN in context:
-                finally_return_context = context.copy()
-                finally_return_context[LEAVE] = context[RETURN]
-                handler_context[RETURN] = analyse_statements(
-                    stmt.finalbody, finally_return_context
-                )
-
-            # 5th case: on leaving the finally block, break.
-            if BREAK in context:
-                finally_break_context = context.copy()
-                finally_break_context[LEAVE] = context[BREAK]
-                handler_context[BREAK] = analyse_statements(
-                    stmt.finalbody, finally_break_context
-                )
-
-            # 6th case: on leaving the finally block, continue
-            if CONTINUE in context:
-                finally_continue_context = context.copy()
-                finally_continue_context[LEAVE] = context[CONTINUE]
-                handler_context[CONTINUE] = analyse_statements(
-                    stmt.finalbody, finally_continue_context
-                )
-
-            # XXX test case of return or raise in else or except clause
-            # XXX test case of all the possibilities in the finally clause
-
-            next_handler = handler_context[RAISE]
-            for handler in reversed(stmt.handlers):
-                match_node = analyse_statements(handler.body, handler_context)
-                if handler.type is None:
-                    handler_node = CFNode({MATCH: match_node})
-                else:
-                    handler_node = CFNode(
-                        {
-                            RAISE: handler_context[RAISE],
-                            MATCH: match_node,
-                            NO_MATCH: next_handler,
-                        }
-                    )
-                next_handler = handler_node
-
-            else_handler = analyse_statements(stmt.orelse, handler_context)
-
-            body_context = handler_context.copy()
-            body_context[RAISE] = next_handler
-            body_context[LEAVE] = else_handler
-            stmt_node = analyse_statements(stmt.body, body_context)
-        else:
-            raise NotImplementedError("Unhandled stmt type", type(stmt))
-
+        stmt_context = context.copy()
+        stmt_context[LEAVE] = head
+        analyser = analysers[type(stmt)]
+        stmt_node = analyser(stmt, stmt_context)
         head = stmt_node
 
     return head
