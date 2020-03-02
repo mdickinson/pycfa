@@ -8,13 +8,12 @@ import ast
 # Constants used as both edge and context labels.
 BREAK = "break"
 CONTINUE = "continue"
-LEAVE = "leave"
+NEXT = "next"
 RAISE = "raise"
 RETURN = "return"
 RETURN_VALUE = "return_value"
 
 # Constants used only as edge labels.
-NEXT = "next"  # XXX could possibly combine with LEAVE
 IF = "if"
 ELSE = "else"
 MATCH = "match"
@@ -51,14 +50,14 @@ def analyse_simple(statement: ast.stmt, context: dict) -> CFNode:
     """
     Analyse a simple statement not involving control flow.
     """
-    return CFNode({RAISE: context[RAISE], NEXT: context[LEAVE]})
+    return CFNode({RAISE: context[RAISE], NEXT: context[NEXT]})
 
 
 def analyse_pass(statement: ast.Pass, context: dict) -> CFNode:
     """
     Analyse a pass statement.
     """
-    return CFNode({NEXT: context[LEAVE]})
+    return CFNode({NEXT: context[NEXT]})
 
 
 def analyse_return(statement: ast.Return, context: dict) -> CFNode:
@@ -104,9 +103,9 @@ def analyse_for_or_while(statement: ast.stmt, context: dict) -> CFNode:
     # Body context introduces new BREAK and CONTINUE targets, and
     # leaving the body means returning to the start of the loop.
     body_context = context.copy()
-    body_context[BREAK] = context[LEAVE]
+    body_context[BREAK] = context[NEXT]
     body_context[CONTINUE] = loop_node
-    body_context[LEAVE] = loop_node
+    body_context[NEXT] = loop_node
     body_node = analyse_statements(statement.body, body_context)
 
     loop_node.add_edge(NEXT, body_node)
@@ -160,7 +159,7 @@ def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
     # on leaving normally, and to the handler chain on raise.
     body_context = context.copy()
     body_context[RAISE] = next_handler
-    body_context[LEAVE] = else_handler
+    body_context[NEXT] = else_handler
     return analyse_statements(statement.body, body_context)
 
 
@@ -170,7 +169,7 @@ def analyse_try(statement: ast.Try, context: dict) -> CFNode:
     """
     handler_context = context.copy()
 
-    # We process the finally block several times, with a different LEAVE target
+    # We process the finally block several times, with a different NEXT target
     # each time. A break / continue / raise / return in any of the try, except
     # or else blocks will transfer control to the finally block, and then on
     # leaving the finally block, will transfer control back to whereever it
@@ -179,10 +178,10 @@ def analyse_try(statement: ast.Try, context: dict) -> CFNode:
     # block, and then on leaving the finally, transfers control to wherever we
     # would have gone if the finally were not present.
 
-    for node_type in [BREAK, CONTINUE, LEAVE, RAISE, RETURN, RETURN_VALUE]:
+    for node_type in [BREAK, CONTINUE, NEXT, RAISE, RETURN, RETURN_VALUE]:
         if node_type in context:
             finally_context = context.copy()
-            finally_context[LEAVE] = context[node_type]
+            finally_context[NEXT] = context[node_type]
             handler_context[node_type] = analyse_statements(
                 statement.finalbody, finally_context
             )
@@ -217,7 +216,7 @@ def analyse_statements(stmts: list, context: dict) -> CFNode:
         Statements to be analysed.
     context : mapping from str to CFNode
         Context in which these statements are being analysed.
-        Should always provide at LEAVE and RAISE nodes. Other nodes
+        Should always provide at NEXT and RAISE nodes. Other nodes
         may be provided, depending on context: RETURN and RETURN_VALUE
         if within a function context, and BREAK and CONTINUE if within
         a loop context.
@@ -226,16 +225,16 @@ def analyse_statements(stmts: list, context: dict) -> CFNode:
     -------
     CFNode
         Node corresponding to the first statement in the statement list.
-        (If the statement list is empty, the LEAVE node from the context
+        (If the statement list is empty, the NEXT node from the context
         will be returned.)
     """
     # It's convenient to iterate over statements in reverse, creating
     # a linked list from the last element in the list backwards.
 
-    head = context[LEAVE]
+    head = context[NEXT]
     for stmt in reversed(stmts):
         stmt_context = context.copy()
-        stmt_context[LEAVE] = head
+        stmt_context[NEXT] = head
         analyser = analysers[type(stmt)]
         stmt_node = analyser(stmt, stmt_context)
         head = stmt_node
@@ -259,7 +258,7 @@ def analyse_function(ast_node):
         RAISE: CFNode(),
         RETURN_VALUE: CFNode(),  # node for 'return <expr>'
         RETURN: CFNode(),  # node for plain valueless return
-        LEAVE: CFNode(),  # node for leaving by falling off the end
+        NEXT: CFNode(),  # node for leaving by falling off the end
     }
     enter = analyse_statements(ast_node.body, context)
     return context, enter
