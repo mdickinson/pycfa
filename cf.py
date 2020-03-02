@@ -48,7 +48,7 @@ class CFNode:
 
 def analyse_simple(statement: ast.stmt, context: dict) -> CFNode:
     """
-    Analyse a simple statement not involving control flow.
+    Analyse a statement not involving control flow.
     """
     return CFNode({RAISE: context[RAISE], NEXT: context[NEXT]})
 
