@@ -94,15 +94,10 @@ def analyse_for_or_while(statement: ast.stmt, context: dict) -> CFNode:
         {
             RAISE: context[RAISE],
             ELSE: analyse_statements(statement.orelse, context),
-            # Also needs a NEXT edge, but we don't have anything
-            # to attach it to yet.
-            # XXX or should "NEXT" be called something else here?
-            # "BODY"? "ENTER"?
+            # The target for the ENTER edge is created below.
         }
     )
 
-    # Body context introduces new BREAK and CONTINUE targets, and
-    # leaving the body means returning to the start of the loop.
     body_context = context.copy()
     body_context[BREAK] = context[NEXT]
     body_context[CONTINUE] = loop_node
@@ -136,31 +131,28 @@ def analyse_continue(statement: ast.Continue, context: dict) -> CFNode:
 
 def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
     """
-    Analyse the try-except-else part of a try statement.
+    Analyse the try-except-else part of a try statement. The finally
+    part is ignored, as though it weren't present.
     """
-    else_handler = analyse_statements(statement.orelse, context)
-
     # Process handlers, backwards: if the last handler doesn't match, raise.
-    next_handler = context[RAISE]
+    raise_node = context[RAISE]
     for handler in reversed(statement.handlers):
         match_node = analyse_statements(handler.body, context)
         if handler.type is None:
-            handler_node = CFNode({MATCH: match_node})
+            # Bare except always matches, never raises.
+            raise_node = CFNode({MATCH: match_node})
         else:
-            handler_node = CFNode(
+            raise_node = CFNode(
                 {
                     RAISE: context[RAISE],
                     MATCH: match_node,
-                    NO_MATCH: next_handler,
+                    NO_MATCH: raise_node,
                 }
             )
-        next_handler = handler_node
 
-    # The body of the try clause passes control to the else clause
-    # on leaving normally, and to the handler chain on raise.
     body_context = context.copy()
-    body_context[RAISE] = next_handler
-    body_context[NEXT] = else_handler
+    body_context[RAISE] = raise_node
+    body_context[NEXT] = analyse_statements(statement.orelse, context)
     return analyse_statements(statement.body, body_context)
 
 
@@ -168,7 +160,7 @@ def analyse_try(statement: ast.Try, context: dict) -> CFNode:
     """
     Analyse a try statement.
     """
-    handler_context = context.copy()
+    try_except_else_context = context.copy()
 
     # We process the finally block several times, with a different NEXT target
     # each time. A break / continue / raise / return in any of the try, except
@@ -183,11 +175,11 @@ def analyse_try(statement: ast.Try, context: dict) -> CFNode:
         if node_type in context:
             finally_context = context.copy()
             finally_context[NEXT] = context[node_type]
-            handler_context[node_type] = analyse_statements(
+            try_except_else_context[node_type] = analyse_statements(
                 statement.finalbody, finally_context
             )
 
-    return _analyse_try_except_else(statement, handler_context)
+    return _analyse_try_except_else(statement, try_except_else_context)
 
 
 # Mapping from statement types to the functions that can analyse them.
@@ -207,6 +199,13 @@ analysers = {
 }
 
 
+def analyse_statement(stmt: ast.stmt, context: dict) -> CFNode:
+    """
+    Analyse control flow for a single statement.
+    """
+    return analysers[type(stmt)](stmt, context)
+
+
 def analyse_statements(stmts: list, context: dict) -> CFNode:
     """
     Analyse control flow for a sequence of statements.
@@ -217,7 +216,7 @@ def analyse_statements(stmts: list, context: dict) -> CFNode:
         Statements to be analysed.
     context : mapping from str to CFNode
         Context in which these statements are being analysed.
-        Should always provide at NEXT and RAISE nodes. Other nodes
+        Should always provide at least NEXT and RAISE nodes. Other nodes
         may be provided, depending on context: RETURN and RETURN_VALUE
         if within a function context, and BREAK and CONTINUE if within
         a loop context.
@@ -232,15 +231,13 @@ def analyse_statements(stmts: list, context: dict) -> CFNode:
     # It's convenient to iterate over statements in reverse, creating
     # a linked list from the last element in the list backwards.
 
-    head = context[NEXT]
+    next = context[NEXT]
     for stmt in reversed(stmts):
         stmt_context = context.copy()
-        stmt_context[NEXT] = head
-        analyser = analysers[type(stmt)]
-        stmt_node = analyser(stmt, stmt_context)
-        head = stmt_node
+        stmt_context[NEXT] = next
+        next = analysers[type(stmt)](stmt, stmt_context)
 
-    return head
+    return next
 
 
 def analyse_function(ast_node):

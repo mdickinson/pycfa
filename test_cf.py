@@ -12,7 +12,7 @@ Aid in detection of things like unreachable code.
 #       will allow easier detection of unreachable statements.)
 # TODO: Better context management (more functional).
 # TODO: Remove function context from code snippets where it's not needed.
-# TODO: test case of return/raise/break/continue in else or except clause
+# TODO: get rid of bare except clause as a node?
 
 
 import ast
@@ -724,6 +724,142 @@ def f():
         continue_node = raise_node.target(RAISE)
         self.assertEdges(continue_node, {CONTINUE})
         self.assertEqual(continue_node.target(CONTINUE), for_node)
+
+    def test_continue_in_except_no_finally(self):
+        code = """\
+def f():
+    for item in item_factory():
+        try:
+            raise SomeException()
+        except:
+            continue
+"""
+        context, for_node = self._function_context(code)
+
+        self.assertEdges(for_node, {ELSE, ENTER, RAISE})
+        self.assertEqual(for_node.target(ELSE), context[NEXT])
+        self.assertEqual(for_node.target(RAISE), context[RAISE])
+
+        raise_node = for_node.target(ENTER)
+        self.assertEdges(raise_node, {RAISE})
+
+        except_node = raise_node.target(RAISE)
+        self.assertEdges(except_node, {MATCH})
+
+        continue_node = except_node.target(MATCH)
+        self.assertEdges(continue_node, {CONTINUE})
+        self.assertEqual(continue_node.target(CONTINUE), for_node)
+
+    def test_continue_in_except(self):
+        code = """\
+def f():
+    for item in item_factory():
+        try:
+            raise SomeException()
+        except:
+            continue
+        finally:
+            do_cleanup()
+"""
+        context, for_node = self._function_context(code)
+
+        self.assertEdges(for_node, {ELSE, ENTER, RAISE})
+        self.assertEqual(for_node.target(ELSE), context[NEXT])
+        self.assertEqual(for_node.target(RAISE), context[RAISE])
+
+        raise_node = for_node.target(ENTER)
+        self.assertEdges(raise_node, {RAISE})
+
+        except_node = raise_node.target(RAISE)
+        self.assertEdges(except_node, {MATCH})
+
+        continue_node = except_node.target(MATCH)
+        self.assertEdges(continue_node, {CONTINUE})
+
+        finally_node = continue_node.target(CONTINUE)
+        self.assertEdges(finally_node, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), for_node)
+
+    def test_break_in_except(self):
+        code = """\
+def f():
+    for item in item_factory():
+        try:
+            raise SomeException()
+        except OtherException():
+            break
+        finally:
+            do_cleanup()
+"""
+        context, for_node = self._function_context(code)
+
+        self.assertEdges(for_node, {ELSE, ENTER, RAISE})
+        self.assertEqual(for_node.target(ELSE), context[NEXT])
+        self.assertEqual(for_node.target(RAISE), context[RAISE])
+
+        raise_node = for_node.target(ENTER)
+        self.assertEdges(raise_node, {RAISE})
+
+        except_node = raise_node.target(RAISE)
+        self.assertEdges(except_node, {MATCH, NO_MATCH, RAISE})
+        self.assertEqual(
+            except_node.target(RAISE), except_node.target(NO_MATCH)
+        )
+
+        finally_raise_node = except_node.target(RAISE)
+        self.assertEdges(finally_raise_node, {NEXT, RAISE})
+        self.assertEqual(finally_raise_node.target(RAISE), context[RAISE])
+        self.assertEqual(finally_raise_node.target(NEXT), context[RAISE])
+
+        break_node = except_node.target(MATCH)
+        self.assertEdges(break_node, {BREAK})
+
+        finally_node = break_node.target(BREAK)
+        self.assertEdges(finally_node, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), context[NEXT])
+
+    def test_return_in_try_else(self):
+        code = """\
+def f():
+    for item in item_factory():
+        try:
+            do_something()
+        except:
+            pass
+        else:
+            return
+        finally:
+            do_cleanup()
+"""
+        context, for_node = self._function_context(code)
+
+        self.assertEdges(for_node, {ELSE, ENTER, RAISE})
+        self.assertEqual(for_node.target(ELSE), context[NEXT])
+        self.assertEqual(for_node.target(RAISE), context[RAISE])
+
+        try_node = for_node.target(ENTER)
+        self.assertEdges(try_node, {NEXT, RAISE})
+
+        except_node = try_node.target(RAISE)
+        self.assertEdges(except_node, {MATCH})
+
+        pass_node = except_node.target(MATCH)
+        self.assertEdges(pass_node, {NEXT})
+
+        finally1_node = pass_node.target(NEXT)
+        self.assertEdges(finally1_node, {NEXT, RAISE})
+        self.assertEqual(finally1_node.target(RAISE), context[RAISE])
+        self.assertEqual(finally1_node.target(NEXT), for_node)
+
+        else_node = try_node.target(NEXT)
+        self.assertEdges(else_node, {RETURN})
+
+        finally_node = else_node.target(RETURN)
+        self.assertEdges(finally_node, {NEXT, RAISE})
+        self.assertEqual(finally_node.target(RAISE), context[RAISE])
+        self.assertEqual(finally_node.target(NEXT), context[RETURN])
 
     def test_statements_outside_function(self):
         code = """\
