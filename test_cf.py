@@ -5,14 +5,15 @@ Aid in detection of things like unreachable code.
 """
 
 # TODO: add and use assertEdges method.
-# TODO: use context in place of function_context.
+# TODO: use context in place of function_context as a name in tests.
 # TODO: add links from CFNodes to the corresponding AST nodes.
 # TODO: try/finally
 # TODO: CFGraph object, containing both nodes and edges. (This
 #       will allow easier detection of unreachable statements.)
 # TODO: Better context management (more functional).
 # TODO: Remove function context from code snippets where it's not needed.
-# TODO: get rid of bare except clause as a node?
+# TODO: create finally clauses lazily, instead of always creating
+#       all six.
 
 
 import ast
@@ -449,10 +450,7 @@ def f():
         self.assertEqual(match1_node.target(RAISE), function_context[RAISE])
         self.assertEqual(match1_node.target(NEXT), function_context[NEXT])
 
-        except2_node = except1_node.target(NO_MATCH)
-        self.assertEqual(except2_node.edge_names, {MATCH})
-
-        match2_node = except2_node.target(MATCH)
+        match2_node = except1_node.target(NO_MATCH)
         self.assertEqual(match2_node.edge_names, {NEXT, RAISE})
         self.assertEqual(match2_node.target(RAISE), function_context[RAISE])
         self.assertEqual(match2_node.target(NEXT), function_context[NEXT])
@@ -476,10 +474,7 @@ def f():
         self.assertEqual(try_node.edge_names, {NEXT, RAISE})
         self.assertEqual(try_node.target(NEXT), function_context[NEXT])
 
-        except_node = try_node.target(RAISE)
-        self.assertEqual(except_node.edge_names, {MATCH})
-
-        pass_node = except_node.target(MATCH)
+        pass_node = try_node.target(RAISE)
         self.assertEqual(pass_node.edge_names, {NEXT})
         self.assertEqual(pass_node.target(NEXT), function_context[NEXT])
 
@@ -743,10 +738,7 @@ def f():
         raise_node = for_node.target(ENTER)
         self.assertEdges(raise_node, {RAISE})
 
-        except_node = raise_node.target(RAISE)
-        self.assertEdges(except_node, {MATCH})
-
-        continue_node = except_node.target(MATCH)
+        continue_node = raise_node.target(RAISE)
         self.assertEdges(continue_node, {CONTINUE})
         self.assertEqual(continue_node.target(CONTINUE), for_node)
 
@@ -770,10 +762,7 @@ def f():
         raise_node = for_node.target(ENTER)
         self.assertEdges(raise_node, {RAISE})
 
-        except_node = raise_node.target(RAISE)
-        self.assertEdges(except_node, {MATCH})
-
-        continue_node = except_node.target(MATCH)
+        continue_node = raise_node.target(RAISE)
         self.assertEdges(continue_node, {CONTINUE})
 
         finally_node = continue_node.target(CONTINUE)
@@ -842,10 +831,7 @@ def f():
         try_node = for_node.target(ENTER)
         self.assertEdges(try_node, {NEXT, RAISE})
 
-        except_node = try_node.target(RAISE)
-        self.assertEdges(except_node, {MATCH})
-
-        pass_node = except_node.target(MATCH)
+        pass_node = try_node.target(RAISE)
         self.assertEdges(pass_node, {NEXT})
 
         finally1_node = pass_node.target(NEXT)
@@ -878,6 +864,14 @@ except:
 
         self.assertEqual(assign_node.edge_names, {NEXT, RAISE})
         self.assertEqual(assign_node.target(RAISE), context[RAISE])
+
+        try_node = assign_node.target(NEXT)
+        self.assertEqual(try_node.edge_names, {NEXT, RAISE})
+        self.assertEqual(try_node.target(NEXT), context[NEXT])
+
+        pass_node = try_node.target(RAISE)
+        self.assertEdges(pass_node, {NEXT})
+        self.assertEqual(pass_node.target(NEXT), context[NEXT])
 
     # Assertions
 

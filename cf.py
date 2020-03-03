@@ -140,7 +140,7 @@ def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
         match_node = analyse_statements(handler.body, context)
         if handler.type is None:
             # Bare except always matches, never raises.
-            raise_node = CFNode({MATCH: match_node})
+            raise_node = match_node
         else:
             raise_node = CFNode(
                 {
