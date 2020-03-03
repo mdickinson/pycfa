@@ -44,7 +44,7 @@ def f():
         context, pass_node = self._function_context(code)
 
         self.assertEdges(pass_node, {NEXT})
-        self.assertIs(pass_node.target(NEXT), context[NEXT])
+        self.assertEqual(pass_node.target(NEXT), context[NEXT])
 
     def test_analyse_single_expr_statement(self):
         code = """\
