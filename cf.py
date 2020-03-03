@@ -54,6 +54,13 @@ def analyse_simple(statement: ast.stmt, context: dict) -> CFNode:
     return CFNode({RAISE: context[RAISE], NEXT: context[NEXT]})
 
 
+def analyse_global_or_nonlocal(statement: ast.Global, context: dict) -> CFNode:
+    """
+    Analyse a global or nonlocal statement.
+    """
+    return context[NEXT]
+
+
 def analyse_pass(statement: ast.Pass, context: dict) -> CFNode:
     """
     Analyse a pass statement.
@@ -182,20 +189,41 @@ def analyse_try(statement: ast.Try, context: dict) -> CFNode:
     return _analyse_try_except_else(statement, try_except_else_context)
 
 
+def analyse_with(statement: ast.With, context: dict) -> CFNode:
+    """
+    Analyse a with statement.
+    """
+    return CFNode(
+        {
+            ENTER: analyse_statements(statement.body, context),
+            RAISE: context[RAISE],
+        }
+    )
+
+
 # Mapping from statement types to the functions that can analyse them.
 
 analysers = {
     ast.Assign: analyse_simple,
+    ast.AugAssign: analyse_simple,
     ast.Break: analyse_break,
+    ast.ClassDef: analyse_simple,
     ast.Continue: analyse_continue,
+    ast.Delete: analyse_simple,
     ast.Expr: analyse_simple,
     ast.For: analyse_for_or_while,
+    ast.Global: analyse_global_or_nonlocal,
+    ast.FunctionDef: analyse_simple,
     ast.If: analyse_if,
+    ast.Import: analyse_simple,
+    ast.ImportFrom: analyse_simple,
+    ast.Nonlocal: analyse_global_or_nonlocal,
     ast.Pass: analyse_pass,
     ast.Raise: analyse_raise,
     ast.Return: analyse_return,
     ast.Try: analyse_try,
     ast.While: analyse_for_or_while,
+    ast.With: analyse_with,
 }
 
 

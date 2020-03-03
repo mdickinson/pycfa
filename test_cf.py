@@ -7,6 +7,7 @@ Aid in detection of things like unreachable code.
 # TODO: add links from CFNodes to the corresponding AST nodes.
 # TODO: CFGraph object, containing both nodes and edges. (This
 #       will allow easier detection of unreachable statements.)
+# TODO: Coverage for other statement types.
 # TODO: Better context management (more functional).
 # TODO: In tests, remove function context from code snippets where it's not
 #       needed.
@@ -848,6 +849,71 @@ except:
         pass_node = try_node.target(RAISE)
         self.assertEdges(pass_node, {NEXT})
         self.assertEqual(pass_node.target(NEXT), context[NEXT])
+
+    def test_with(self):
+        code = """\
+with some_cm() as name:
+    do_something()
+"""
+        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        context = {
+            NEXT: CFNode(),
+            RAISE: CFNode(),
+        }
+        with_node = analyse_statements(module_node.body, context)
+        self.assertEdges(with_node, {ENTER, RAISE})
+        self.assertEqual(with_node.target(RAISE), context[RAISE])
+
+        body_node = with_node.target(ENTER)
+        self.assertEdges(body_node, {NEXT, RAISE})
+        self.assertEqual(body_node.target(RAISE), context[RAISE])
+        self.assertEqual(body_node.target(NEXT), context[NEXT])
+
+    def test_global(self):
+        code = """\
+def f():
+    global bob
+"""
+        context, node = self._function_context(code)
+        self.assertEqual(node, context[NEXT])
+
+    def test_nonlocal(self):
+        code = """\
+def f(bob):
+    def g():
+        nonlocal bob
+"""
+        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        (function_node,) = module_node.body
+        (inner_function,) = function_node.body
+
+        context, node = analyse_function(inner_function)
+        self.assertEqual(node, context[NEXT])
+
+    def test_assorted_simple_statements(self):
+        code = """\
+del x, y, z
+def f():
+    pass
+from france import cheese
+import this
+a += b
+class A:
+    pass
+"""
+        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        context = {
+            NEXT: CFNode(),
+            RAISE: CFNode(),
+        }
+
+        node = analyse_statements(module_node.body, context)
+        for _ in range(len(module_node.body)):
+            self.assertEdges(node, {NEXT, RAISE})
+            self.assertEqual(node.target(RAISE), context[RAISE])
+            node = node.target(NEXT)
+
+        self.assertEqual(node, context[NEXT])
 
     # Assertions
 
