@@ -204,6 +204,7 @@ def analyse_with(statement: ast.With, context: dict) -> CFNode:
 # Mapping from statement types to the functions that can analyse them.
 
 analysers = {
+    ast.Assert: analyse_simple,
     ast.Assign: analyse_simple,
     ast.AugAssign: analyse_simple,
     ast.Break: analyse_break,

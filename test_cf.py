@@ -900,6 +900,7 @@ import this
 a += b
 class A:
     pass
+assert 2 is not 3
 """
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
         context = {
