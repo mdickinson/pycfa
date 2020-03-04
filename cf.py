@@ -35,6 +35,17 @@ class CFGraph:
         self.nodes = set()
         self.edges = {}
 
+    def add_node(self, node):
+        assert node not in self.nodes
+        self.nodes.add(node)
+        self.edges[node] = {}
+
+    def add_edge(self, source, label, target):
+        source_edges = self.edges[source]
+
+        assert label not in source_edges
+        source_edges[label] = target
+
 
 class CFNode:
     """
@@ -44,29 +55,9 @@ class CFNode:
     def __init__(self, edges, graph):
         self.graph = graph
 
-        # Keep track of the graph that the node belongs to. For now,
-        # we add links in both directions - from the node to the graph
-        # and the graph to the node. Eventually we'll remove the links
-        # from the node to the graph.
-        assert self not in graph.nodes
-        graph.nodes.add(self)
-        graph.edges[self] = {}
-
+        self.graph.add_node(self)
         for name, target in edges.items():
-            self.add_edge(name, target)
-
-    def add_edge(self, name, target):
-        edges_from_self = self.graph.edges[self]
-
-        # Be careful about overwriting.
-        if name in edges_from_self:
-            raise ValueError("An edge with that name already exists")
-        edges_from_self[name] = target
-
-    @property
-    def edge_names(self):
-        # Names of outward edges, as a set.
-        return set(self.graph.edges[self].keys())
+            self.graph.add_edge(self, name, target)
 
     def target(self, edge_name):
         return self.graph.edges[self][edge_name]
@@ -90,9 +81,7 @@ def analyse_global_or_nonlocal(
     return context[NEXT]
 
 
-def analyse_pass(
-    statement: ast.Pass, context: dict, graph: CFGraph
-) -> CFNode:
+def analyse_pass(statement: ast.Pass, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse a pass statement.
     """
@@ -109,14 +98,11 @@ def analyse_return(
         return CFNode({RETURN: context[RETURN]}, graph)
     else:
         return CFNode(
-            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
-            graph
+            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]}, graph
         )
 
 
-def analyse_if(
-    statement: ast.If, context: dict, graph: CFGraph
-) -> CFNode:
+def analyse_if(statement: ast.If, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse an if statement.
     """
@@ -126,7 +112,7 @@ def analyse_if(
             ELSE: analyse_statements(statement.orelse, context, graph),
             RAISE: context[RAISE],
         },
-        graph
+        graph,
     )
 
 
@@ -142,7 +128,7 @@ def analyse_for_or_while(
             ELSE: analyse_statements(statement.orelse, context, graph),
             # The target for the ENTER edge is created below.
         },
-        graph
+        graph,
     )
 
     body_context = context.copy()
@@ -151,7 +137,7 @@ def analyse_for_or_while(
     body_context[NEXT] = loop_node
     body_node = analyse_statements(statement.body, body_context, graph)
 
-    loop_node.add_edge(ENTER, body_node)
+    graph.add_edge(loop_node, ENTER, body_node)
     return loop_node
 
 
@@ -203,7 +189,7 @@ def _analyse_try_except_else(
                     MATCH: match_node,
                     NO_MATCH: raise_node,
                 },
-                graph
+                graph,
             )
 
     body_context = context.copy()
@@ -214,9 +200,7 @@ def _analyse_try_except_else(
     return CFNode({ENTER: body_node}, graph)
 
 
-def analyse_try(
-    statement: ast.Try, context: dict, graph: CFGraph
-) -> CFNode:
+def analyse_try(statement: ast.Try, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse a try statement.
     """
@@ -242,9 +226,7 @@ def analyse_try(
     return _analyse_try_except_else(statement, try_except_else_context, graph)
 
 
-def analyse_with(
-    statement: ast.With, context: dict, graph: CFGraph
-) -> CFNode:
+def analyse_with(statement: ast.With, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse a with statement.
     """
@@ -253,7 +235,7 @@ def analyse_with(
             ENTER: analyse_statements(statement.body, context, graph),
             RAISE: context[RAISE],
         },
-        graph
+        graph,
     )
 
 

@@ -38,6 +38,9 @@ from cf import (
 
 
 class TestCFAnalyser(unittest.TestCase):
+    def setUp(self):
+        self.graph = CFGraph()
+
     def test_analyse_noop_function(self):
         code = """\
 def f():
@@ -921,8 +924,7 @@ def f(bob):
         (function_node,) = module_node.body
         (inner_function,) = function_node.body
 
-        graph = CFGraph()
-        context, node = analyse_function(inner_function, graph)
+        context, node = analyse_function(inner_function, self.graph)
         self.assertEqual(node, context[NEXT])
 
     def test_assorted_simple_statements(self):
@@ -952,7 +954,7 @@ assert 2 is not 3
         """
         Assert that the outward edges from a node have the given names.
         """
-        self.assertEqual(node.edge_names, edges)
+        self.assertEqual(set(self.graph.edges[node].keys()), edges)
 
     # Helper methods
 
@@ -968,8 +970,7 @@ assert 2 is not 3
 
     def _function_context(self, code):
         ast_node = self._node_from_function(code)
-        graph = CFGraph()
-        context, enter = analyse_function(ast_node, graph)
+        context, enter = analyse_function(ast_node, self.graph)
         self.assertEqual(
             sorted(context.keys()), [NEXT, RAISE, RETURN, RETURN_VALUE],
         )
@@ -982,12 +983,11 @@ assert 2 is not 3
 
     def _statements_context(self, code):
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        graph = CFGraph()
         context = {
-            NEXT: CFNode({}, graph),
-            RAISE: CFNode({}, graph),
+            NEXT: CFNode({}, self.graph),
+            RAISE: CFNode({}, self.graph),
         }
-        body_node = analyse_statements(module_node.body, context, graph)
+        body_node = analyse_statements(module_node.body, context, self.graph)
         return context, body_node
 
 
