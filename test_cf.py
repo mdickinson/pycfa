@@ -5,9 +5,6 @@ Aid in detection of things like unreachable code.
 """
 
 # TODO: add links from CFNodes to the corresponding AST nodes.
-# TODO: CFGraph object, containing both nodes and edges. (This
-#       will allow easier detection of unreachable statements.)
-# TODO: Coverage for other statement types.
 # TODO: Better context management (more functional).
 # TODO: In tests, remove function context from code snippets where it's not
 #       needed.
