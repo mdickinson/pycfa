@@ -46,21 +46,23 @@ class CFGraph:
         assert label not in source_edges
         source_edges[label] = target
 
+    def cfnode(self, edges):
+        """
+        Create a new control-flow node and add it to the graph.
+
+        Returns the newly-created node.
+        """
+        node = CFNode()
+        self.add_node(node)
+        for name, target in edges.items():
+            self.add_edge(node, name, target)
+        return node
+
 
 class CFNode:
     """
     A node on the control flow graph.
     """
-
-    def __init__(self, edges, graph):
-        self.graph = graph
-
-        self.graph.add_node(self)
-        for name, target in edges.items():
-            self.graph.add_edge(self, name, target)
-
-    def target(self, edge_name):
-        return self.graph.edges[self][edge_name]
 
 
 def analyse_simple(
@@ -69,7 +71,7 @@ def analyse_simple(
     """
     Analyse a statement not involving control flow.
     """
-    return CFNode({RAISE: context[RAISE], NEXT: context[NEXT]}, graph)
+    return graph.cfnode({RAISE: context[RAISE], NEXT: context[NEXT]})
 
 
 def analyse_global_or_nonlocal(
@@ -85,7 +87,7 @@ def analyse_pass(statement: ast.Pass, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse a pass statement.
     """
-    return CFNode({NEXT: context[NEXT]}, graph)
+    return graph.cfnode({NEXT: context[NEXT]})
 
 
 def analyse_return(
@@ -95,10 +97,10 @@ def analyse_return(
     Analyse a return statement.
     """
     if statement.value is None:
-        return CFNode({RETURN: context[RETURN]}, graph)
+        return graph.cfnode({RETURN: context[RETURN]})
     else:
-        return CFNode(
-            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]}, graph
+        return graph.cfnode(
+            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
         )
 
 
@@ -106,13 +108,12 @@ def analyse_if(statement: ast.If, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse an if statement.
     """
-    return CFNode(
+    return graph.cfnode(
         {
             IF: analyse_statements(statement.body, context, graph),
             ELSE: analyse_statements(statement.orelse, context, graph),
             RAISE: context[RAISE],
-        },
-        graph,
+        }
     )
 
 
@@ -122,13 +123,12 @@ def analyse_for_or_while(
     """
     Analyse a for or while statement.
     """
-    loop_node = CFNode(
+    loop_node = graph.cfnode(
         {
             RAISE: context[RAISE],
             ELSE: analyse_statements(statement.orelse, context, graph),
             # The target for the ENTER edge is created below.
-        },
-        graph,
+        }
     )
 
     body_context = context.copy()
@@ -147,7 +147,7 @@ def analyse_raise(
     """
     Analyse a raise statement.
     """
-    return CFNode({RAISE: context[RAISE]}, graph)
+    return graph.cfnode({RAISE: context[RAISE]})
 
 
 def analyse_break(
@@ -156,7 +156,7 @@ def analyse_break(
     """
     Analyse a break statement.
     """
-    return CFNode({BREAK: context[BREAK]}, graph)
+    return graph.cfnode({BREAK: context[BREAK]})
 
 
 def analyse_continue(
@@ -165,7 +165,7 @@ def analyse_continue(
     """
     Analyse a continue statement.
     """
-    return CFNode({CONTINUE: context[CONTINUE]}, graph)
+    return graph.cfnode({CONTINUE: context[CONTINUE]})
 
 
 def _analyse_try_except_else(
@@ -183,13 +183,12 @@ def _analyse_try_except_else(
             # Bare except always matches, never raises.
             raise_node = match_node
         else:
-            raise_node = CFNode(
+            raise_node = graph.cfnode(
                 {
                     RAISE: context[RAISE],
                     MATCH: match_node,
                     NO_MATCH: raise_node,
-                },
-                graph,
+                }
             )
 
     body_context = context.copy()
@@ -197,7 +196,7 @@ def _analyse_try_except_else(
     body_context[NEXT] = analyse_statements(statement.orelse, context, graph)
     body_node = analyse_statements(statement.body, body_context, graph)
 
-    return CFNode({ENTER: body_node}, graph)
+    return graph.cfnode({ENTER: body_node})
 
 
 def analyse_try(statement: ast.Try, context: dict, graph: CFGraph) -> CFNode:
@@ -230,12 +229,11 @@ def analyse_with(statement: ast.With, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse a with statement.
     """
-    return CFNode(
+    return graph.cfnode(
         {
             ENTER: analyse_statements(statement.body, context, graph),
             RAISE: context[RAISE],
-        },
-        graph,
+        }
     )
 
 
@@ -314,10 +312,10 @@ def analyse_function(ast_node, graph):
         and the various exit points.
     """
     context = {
-        RAISE: CFNode({}, graph),
-        RETURN_VALUE: CFNode({}, graph),  # node for 'return <expr>'
-        RETURN: CFNode({}, graph),  # node for plain valueless return
-        NEXT: CFNode({}, graph),  # node for leaving by falling off the end
+        RAISE: graph.cfnode({}),
+        RETURN_VALUE: graph.cfnode({}),  # node for 'return <expr>'
+        RETURN: graph.cfnode({}),  # node for plain valueless return
+        NEXT: graph.cfnode({}),  # node for leaving by falling off the end
     }
     enter = analyse_statements(ast_node.body, context, graph)
     return context, enter
