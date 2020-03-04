@@ -28,6 +28,7 @@ class CFGraph:
     This is a directed graph (not necessarily acyclic) with labelled edges.
     Most nodes will correspond directly to an AST statement.
     """
+
     def __init__(self):
         # Representation: nodes form a set; for each node, edges[node]
         # is a mapping from labels to nodes.
@@ -35,123 +36,155 @@ class CFGraph:
         self.edges = {}
 
 
-
 class CFNode:
     """
     A node on the control flow graph.
     """
 
-    def __init__(self, edges):
-        # Outward edges for possible control flow transfer.
-        self._out = {}
+    def __init__(self, edges, graph):
+        self.graph = graph
+
+        # Keep track of the graph that the node belongs to. For now,
+        # we add links in both directions - from the node to the graph
+        # and the graph to the node. Eventually we'll remove the links
+        # from the node to the graph.
+        assert self not in graph.nodes
+        graph.nodes.add(self)
+        graph.edges[self] = {}
+
         for name, target in edges.items():
             self.add_edge(name, target)
 
     def add_edge(self, name, target):
-        # For now, be careful about overwriting.
-        if name in self._out:
+        edges_from_self = self.graph.edges[self]
+
+        # Be careful about overwriting.
+        if name in edges_from_self:
             raise ValueError("An edge with that name already exists")
-        self._out[name] = target
+        edges_from_self[name] = target
 
     @property
     def edge_names(self):
         # Names of outward edges, as a set.
-        return set(self._out.keys())
+        return set(self.graph.edges[self].keys())
 
     def target(self, edge_name):
-        return self._out[edge_name]
+        return self.graph.edges[self][edge_name]
 
 
-def analyse_simple(statement: ast.stmt, context: dict) -> CFNode:
+def analyse_simple(
+    statement: ast.stmt, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a statement not involving control flow.
     """
-    return CFNode({RAISE: context[RAISE], NEXT: context[NEXT]})
+    return CFNode({RAISE: context[RAISE], NEXT: context[NEXT]}, graph)
 
 
-def analyse_global_or_nonlocal(statement: ast.Global, context: dict) -> CFNode:
+def analyse_global_or_nonlocal(
+    statement: ast.Global, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a global or nonlocal statement.
     """
     return context[NEXT]
 
 
-def analyse_pass(statement: ast.Pass, context: dict) -> CFNode:
+def analyse_pass(
+    statement: ast.Pass, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a pass statement.
     """
-    return CFNode({NEXT: context[NEXT]})
+    return CFNode({NEXT: context[NEXT]}, graph)
 
 
-def analyse_return(statement: ast.Return, context: dict) -> CFNode:
+def analyse_return(
+    statement: ast.Return, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a return statement.
     """
     if statement.value is None:
-        return CFNode({RETURN: context[RETURN]})
+        return CFNode({RETURN: context[RETURN]}, graph)
     else:
         return CFNode(
-            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]}
+            {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
+            graph
         )
 
 
-def analyse_if(statement: ast.If, context: dict) -> CFNode:
+def analyse_if(
+    statement: ast.If, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse an if statement.
     """
     return CFNode(
         {
-            IF: analyse_statements(statement.body, context),
-            ELSE: analyse_statements(statement.orelse, context),
+            IF: analyse_statements(statement.body, context, graph),
+            ELSE: analyse_statements(statement.orelse, context, graph),
             RAISE: context[RAISE],
-        }
+        },
+        graph
     )
 
 
-def analyse_for_or_while(statement: ast.stmt, context: dict) -> CFNode:
+def analyse_for_or_while(
+    statement: ast.stmt, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a for or while statement.
     """
     loop_node = CFNode(
         {
             RAISE: context[RAISE],
-            ELSE: analyse_statements(statement.orelse, context),
+            ELSE: analyse_statements(statement.orelse, context, graph),
             # The target for the ENTER edge is created below.
-        }
+        },
+        graph
     )
 
     body_context = context.copy()
     body_context[BREAK] = context[NEXT]
     body_context[CONTINUE] = loop_node
     body_context[NEXT] = loop_node
-    body_node = analyse_statements(statement.body, body_context)
+    body_node = analyse_statements(statement.body, body_context, graph)
 
     loop_node.add_edge(ENTER, body_node)
     return loop_node
 
 
-def analyse_raise(statement: ast.Raise, context: dict) -> CFNode:
+def analyse_raise(
+    statement: ast.Raise, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a raise statement.
     """
-    return CFNode({RAISE: context[RAISE]})
+    return CFNode({RAISE: context[RAISE]}, graph)
 
 
-def analyse_break(statement: ast.Break, context: dict) -> CFNode:
+def analyse_break(
+    statement: ast.Break, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a break statement.
     """
-    return CFNode({BREAK: context[BREAK]})
+    return CFNode({BREAK: context[BREAK]}, graph)
 
 
-def analyse_continue(statement: ast.Continue, context: dict) -> CFNode:
+def analyse_continue(
+    statement: ast.Continue, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a continue statement.
     """
-    return CFNode({CONTINUE: context[CONTINUE]})
+    return CFNode({CONTINUE: context[CONTINUE]}, graph)
 
 
-def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
+def _analyse_try_except_else(
+    statement: ast.Try, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse the try-except-else part of a try statement. The finally
     part is ignored, as though it weren't present.
@@ -159,7 +192,7 @@ def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
     # Process handlers, backwards: if the last handler doesn't match, raise.
     raise_node = context[RAISE]
     for handler in reversed(statement.handlers):
-        match_node = analyse_statements(handler.body, context)
+        match_node = analyse_statements(handler.body, context, graph)
         if handler.type is None:
             # Bare except always matches, never raises.
             raise_node = match_node
@@ -169,18 +202,21 @@ def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
                     RAISE: context[RAISE],
                     MATCH: match_node,
                     NO_MATCH: raise_node,
-                }
+                },
+                graph
             )
 
     body_context = context.copy()
     body_context[RAISE] = raise_node
-    body_context[NEXT] = analyse_statements(statement.orelse, context)
-    body_node = analyse_statements(statement.body, body_context)
+    body_context[NEXT] = analyse_statements(statement.orelse, context, graph)
+    body_node = analyse_statements(statement.body, body_context, graph)
 
-    return CFNode({ENTER: body_node})
+    return CFNode({ENTER: body_node}, graph)
 
 
-def analyse_try(statement: ast.Try, context: dict) -> CFNode:
+def analyse_try(
+    statement: ast.Try, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a try statement.
     """
@@ -200,21 +236,24 @@ def analyse_try(statement: ast.Try, context: dict) -> CFNode:
             finally_context = context.copy()
             finally_context[NEXT] = context[node_type]
             try_except_else_context[node_type] = analyse_statements(
-                statement.finalbody, finally_context
+                statement.finalbody, finally_context, graph
             )
 
-    return _analyse_try_except_else(statement, try_except_else_context)
+    return _analyse_try_except_else(statement, try_except_else_context, graph)
 
 
-def analyse_with(statement: ast.With, context: dict) -> CFNode:
+def analyse_with(
+    statement: ast.With, context: dict, graph: CFGraph
+) -> CFNode:
     """
     Analyse a with statement.
     """
     return CFNode(
         {
-            ENTER: analyse_statements(statement.body, context),
+            ENTER: analyse_statements(statement.body, context, graph),
             RAISE: context[RAISE],
-        }
+        },
+        graph
     )
 
 
@@ -245,14 +284,7 @@ analysers = {
 }
 
 
-def analyse_statement(stmt: ast.stmt, context: dict) -> CFNode:
-    """
-    Analyse control flow for a single statement.
-    """
-    return analysers[type(stmt)](stmt, context)
-
-
-def analyse_statements(stmts: list, context: dict) -> CFNode:
+def analyse_statements(stmts: list, context: dict, graph: CFGraph) -> CFNode:
     """
     Analyse control flow for a sequence of statements.
 
@@ -281,16 +313,17 @@ def analyse_statements(stmts: list, context: dict) -> CFNode:
     for stmt in reversed(stmts):
         stmt_context = context.copy()
         stmt_context[NEXT] = next
-        next = analysers[type(stmt)](stmt, stmt_context)
+        next = analysers[type(stmt)](stmt, stmt_context, graph)
 
     return next
 
 
-def analyse_function(ast_node):
+def analyse_function(ast_node, graph):
     """
     Parameters
     ----------
     ast_node : ast.FunctionDef
+    graph : CFGraph
 
     Returns
     -------
@@ -299,10 +332,10 @@ def analyse_function(ast_node):
         and the various exit points.
     """
     context = {
-        RAISE: CFNode({}),
-        RETURN_VALUE: CFNode({}),  # node for 'return <expr>'
-        RETURN: CFNode({}),  # node for plain valueless return
-        NEXT: CFNode({}),  # node for leaving by falling off the end
+        RAISE: CFNode({}, graph),
+        RETURN_VALUE: CFNode({}, graph),  # node for 'return <expr>'
+        RETURN: CFNode({}, graph),  # node for plain valueless return
+        NEXT: CFNode({}, graph),  # node for leaving by falling off the end
     }
-    enter = analyse_statements(ast_node.body, context)
+    enter = analyse_statements(ast_node.body, context, graph)
     return context, enter

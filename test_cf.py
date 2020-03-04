@@ -22,6 +22,7 @@ from cf import (
     analyse_function,
     analyse_statements,
     BREAK,
+    CFGraph,
     CFNode,
     CONTINUE,
     ELSE,
@@ -920,7 +921,8 @@ def f(bob):
         (function_node,) = module_node.body
         (inner_function,) = function_node.body
 
-        context, node = analyse_function(inner_function)
+        graph = CFGraph()
+        context, node = analyse_function(inner_function, graph)
         self.assertEqual(node, context[NEXT])
 
     def test_assorted_simple_statements(self):
@@ -966,7 +968,8 @@ assert 2 is not 3
 
     def _function_context(self, code):
         ast_node = self._node_from_function(code)
-        context, enter = analyse_function(ast_node)
+        graph = CFGraph()
+        context, enter = analyse_function(ast_node, graph)
         self.assertEqual(
             sorted(context.keys()), [NEXT, RAISE, RETURN, RETURN_VALUE],
         )
@@ -979,11 +982,12 @@ assert 2 is not 3
 
     def _statements_context(self, code):
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        graph = CFGraph()
         context = {
-            NEXT: CFNode({}),
-            RAISE: CFNode({}),
+            NEXT: CFNode({}, graph),
+            RAISE: CFNode({}, graph),
         }
-        body_node = analyse_statements(module_node.body, context)
+        body_node = analyse_statements(module_node.body, context, graph)
         return context, body_node
 
 
