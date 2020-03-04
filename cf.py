@@ -21,12 +21,27 @@ MATCH = "match"
 NO_MATCH = "no_match"
 
 
+class CFGraph:
+    """
+    The control-flow graph.
+
+    This is a directed graph (not necessarily acyclic) with labelled edges.
+    Most nodes will correspond directly to an AST statement.
+    """
+    def __init__(self):
+        # Representation: nodes form a set; for each node, edges[node]
+        # is a mapping from labels to nodes.
+        self.nodes = set()
+        self.edges = {}
+
+
+
 class CFNode:
     """
     A node on the control flow graph.
     """
 
-    def __init__(self, edges={}):
+    def __init__(self, edges):
         # Outward edges for possible control flow transfer.
         self._out = {}
         for name, target in edges.items():
@@ -284,10 +299,10 @@ def analyse_function(ast_node):
         and the various exit points.
     """
     context = {
-        RAISE: CFNode(),
-        RETURN_VALUE: CFNode(),  # node for 'return <expr>'
-        RETURN: CFNode(),  # node for plain valueless return
-        NEXT: CFNode(),  # node for leaving by falling off the end
+        RAISE: CFNode({}),
+        RETURN_VALUE: CFNode({}),  # node for 'return <expr>'
+        RETURN: CFNode({}),  # node for plain valueless return
+        NEXT: CFNode({}),  # node for leaving by falling off the end
     }
     enter = analyse_statements(ast_node.body, context)
     return context, enter

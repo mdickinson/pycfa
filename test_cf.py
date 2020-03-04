@@ -873,13 +873,7 @@ try:
 except:
     pass
 """
-        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        context = {
-            NEXT: CFNode(),
-            RAISE: CFNode(),
-        }
-        assign_node = analyse_statements(module_node.body, context)
-
+        context, assign_node = self._statements_context(code)
         self.assertEdges(assign_node, {NEXT, RAISE})
         self.assertEqual(assign_node.target(RAISE), context[RAISE])
 
@@ -899,12 +893,7 @@ except:
 with some_cm() as name:
     do_something()
 """
-        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        context = {
-            NEXT: CFNode(),
-            RAISE: CFNode(),
-        }
-        with_node = analyse_statements(module_node.body, context)
+        context, with_node = self._statements_context(code)
         self.assertEdges(with_node, {ENTER, RAISE})
         self.assertEqual(with_node.target(RAISE), context[RAISE])
 
@@ -946,14 +935,9 @@ class A:
     pass
 assert 2 is not 3
 """
-        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        context = {
-            NEXT: CFNode(),
-            RAISE: CFNode(),
-        }
+        context, node = self._statements_context(code)
 
-        node = analyse_statements(module_node.body, context)
-        for _ in range(len(module_node.body)):
+        for _ in range(7):
             self.assertEdges(node, {NEXT, RAISE})
             self.assertEqual(node.target(RAISE), context[RAISE])
             node = node.target(NEXT)
@@ -992,6 +976,15 @@ assert 2 is not 3
         self.assertEdges(context[RETURN_VALUE], set())
 
         return context, enter
+
+    def _statements_context(self, code):
+        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        context = {
+            NEXT: CFNode({}),
+            RAISE: CFNode({}),
+        }
+        body_node = analyse_statements(module_node.body, context)
+        return context, body_node
 
 
 if __name__ == "__main__":
