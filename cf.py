@@ -160,7 +160,9 @@ def _analyse_try_except_else(statement: ast.Try, context: dict) -> CFNode:
     body_context = context.copy()
     body_context[RAISE] = raise_node
     body_context[NEXT] = analyse_statements(statement.orelse, context)
-    return analyse_statements(statement.body, body_context)
+    body_node = analyse_statements(statement.body, body_context)
+
+    return CFNode({ENTER: body_node})
 
 
 def analyse_try(statement: ast.Try, context: dict) -> CFNode:
