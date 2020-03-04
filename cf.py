@@ -263,24 +263,26 @@ class CFGraph:
         return next
 
 
-def analyse_function(ast_node, graph):
+def analyse_function(ast_node):
     """
     Parameters
     ----------
     ast_node : ast.FunctionDef
-    graph : CFGraph
 
     Returns
     -------
+    graph : CFGraph
+        Control flow graph for the function.
     context : mapping from str to CFNode
         Context for the function, giving nodes for the entry point
         and the various exit points.
     """
+    graph = CFGraph()
     context = {
         RAISE: graph.cfnode({}),
         RETURN_VALUE: graph.cfnode({}),  # node for 'return <expr>'
         RETURN: graph.cfnode({}),  # node for plain valueless return
         NEXT: graph.cfnode({}),  # node for leaving by falling off the end
     }
-    enter = graph.analyse_statements(ast_node.body, context)
-    return context, enter
+    context[ENTER] = graph.analyse_statements(ast_node.body, context)
+    return graph, context

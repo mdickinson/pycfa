@@ -33,9 +33,6 @@ from cf import (
 
 
 class TestCFAnalyser(unittest.TestCase):
-    def setUp(self):
-        self.graph = CFGraph()
-
     def test_analyse_noop_function(self):
         code = """\
 def f():
@@ -917,7 +914,9 @@ def f(bob):
         (function_node,) = module_node.body
         (inner_function,) = function_node.body
 
-        context, node = analyse_function(inner_function, self.graph)
+        graph, context = analyse_function(inner_function)
+        self.graph = graph
+        node = context[ENTER]
         self.assertEqual(node, context[NEXT])
 
     def test_assorted_simple_statements(self):
@@ -970,18 +969,20 @@ assert 2 is not 3
 
     def _function_context(self, code):
         ast_node = self._node_from_function(code)
-        context, enter = analyse_function(ast_node, self.graph)
+        graph, context = analyse_function(ast_node)
+        self.graph = graph
         self.assertEqual(
-            sorted(context.keys()), [NEXT, RAISE, RETURN, RETURN_VALUE],
+            sorted(context.keys()), [ENTER, NEXT, RAISE, RETURN, RETURN_VALUE],
         )
         self.assertEdges(context[NEXT], set())
         self.assertEdges(context[RAISE], set())
         self.assertEdges(context[RETURN], set())
         self.assertEdges(context[RETURN_VALUE], set())
 
-        return context, enter
+        return context, context[ENTER]
 
     def _statements_context(self, code):
+        self.graph = CFGraph()
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
         context = {
             NEXT: self.graph.cfnode({}),
