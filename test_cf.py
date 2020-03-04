@@ -17,7 +17,6 @@ import unittest
 
 from cf import (
     analyse_function,
-    analyse_statements,
     BREAK,
     CFGraph,
     CONTINUE,
@@ -988,7 +987,7 @@ assert 2 is not 3
             NEXT: self.graph.cfnode({}),
             RAISE: self.graph.cfnode({}),
         }
-        body_node = analyse_statements(module_node.body, context, self.graph)
+        body_node = self.graph.analyse_statements(module_node.body, context)
         return context, body_node
 
 
