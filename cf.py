@@ -120,7 +120,9 @@ class CFGraph:
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_AugAssign(self, statement: ast.AugAssign, context: dict) -> CFNode:
+    def analyse_AugAssign(
+        self, statement: ast.AugAssign, context: dict
+    ) -> CFNode:
         """
         Analyse an augmented assignment statement.
         """
@@ -132,7 +134,9 @@ class CFGraph:
         """
         return self.cfnode({BREAK: context[BREAK]})
 
-    def analyse_ClassDef(self, statement: ast.ClassDef, context: dict) -> CFNode:
+    def analyse_ClassDef(
+        self, statement: ast.ClassDef, context: dict
+    ) -> CFNode:
         """
         Analyse a class definition.
         """
@@ -164,7 +168,9 @@ class CFGraph:
         """
         return self._analyse_for_or_while(statement, context)
 
-    def analyse_FunctionDef(self, statement: ast.FunctionDef, context: dict) -> CFNode:
+    def analyse_FunctionDef(
+        self, statement: ast.FunctionDef, context: dict
+    ) -> CFNode:
         """
         Analyse a function definition.
         """
@@ -194,13 +200,17 @@ class CFGraph:
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_ImportFrom(self, statement: ast.ImportFrom, context: dict) -> CFNode:
+    def analyse_ImportFrom(
+        self, statement: ast.ImportFrom, context: dict
+    ) -> CFNode:
         """
         Analyse a from ... import statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Nonlocal(self, statement: ast.Nonlocal, context: dict) -> CFNode:
+    def analyse_Nonlocal(
+        self, statement: ast.Nonlocal, context: dict
+    ) -> CFNode:
         """
         Analyse a global statement
         """
