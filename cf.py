@@ -239,12 +239,6 @@ class CFGraph:
                 {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
             )
 
-    def analyse_simple(self, statement: ast.stmt, context: dict) -> CFNode:
-        """
-        Analyse a statement not involving control flow.
-        """
-        return self.cfnode({RAISE: context[RAISE], NEXT: context[NEXT]})
-
     def _analyse_try_except_else(
         self, statement: ast.Try, context: dict
     ) -> CFNode:
