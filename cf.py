@@ -21,33 +21,6 @@ MATCH = "match"
 NO_MATCH = "no_match"
 
 
-# Mapping from statement types to the names of the methods that can analyse
-# them.
-ANALYSERS = {
-    ast.Assert: "analyse_simple",
-    ast.Assign: "analyse_simple",
-    ast.AugAssign: "analyse_simple",
-    ast.Break: "analyse_break",
-    ast.ClassDef: "analyse_simple",
-    ast.Continue: "analyse_continue",
-    ast.Delete: "analyse_simple",
-    ast.Expr: "analyse_simple",
-    ast.For: "analyse_for_or_while",
-    ast.Global: "analyse_global_or_nonlocal",
-    ast.FunctionDef: "analyse_simple",
-    ast.If: "analyse_if",
-    ast.Import: "analyse_simple",
-    ast.ImportFrom: "analyse_simple",
-    ast.Nonlocal: "analyse_global_or_nonlocal",
-    ast.Pass: "analyse_pass",
-    ast.Raise: "analyse_raise",
-    ast.Return: "analyse_return",
-    ast.Try: "analyse_try",
-    ast.While: "analyse_for_or_while",
-    ast.With: "analyse_with",
-}
-
-
 class CFNode:
     """
     A node on the control flow graph.
@@ -95,25 +68,11 @@ class CFGraph:
             self.add_edge(node, name, target)
         return node
 
-    def analyse_break(self, statement: ast.Break, context: dict) -> CFNode:
-        """
-        Analyse a break statement.
-        """
-        return self.cfnode({BREAK: context[BREAK]})
-
-    def analyse_continue(
-        self, statement: ast.Continue, context: dict
-    ) -> CFNode:
-        """
-        Analyse a continue statement.
-        """
-        return self.cfnode({CONTINUE: context[CONTINUE]})
-
-    def analyse_for_or_while(
+    def _analyse_for_or_while(
         self, statement: ast.stmt, context: dict
     ) -> CFNode:
         """
-        Analyse a for or while statement.
+        Analyse a loop statement (for or while).
         """
         loop_node = self.cfnode(
             {
@@ -132,18 +91,92 @@ class CFGraph:
         self.add_edge(loop_node, ENTER, body_node)
         return loop_node
 
-    def analyse_global_or_nonlocal(
+    def _analyse_generic(self, statement: ast.stmt, context: dict) -> CFNode:
+        """
+        Analyse a generic statement that doesn't affect control flow.
+        """
+        return self.cfnode({RAISE: context[RAISE], NEXT: context[NEXT]})
+
+    def _analyse_global_or_nonlocal(
         self, statement: ast.Global, context: dict
     ) -> CFNode:
         """
-        Analyse a global or nonlocal statement.
+        Analyse a declaration (a global or nonlocal statement).
 
         These statements are non-executable, so we don't create a node
         for them. Instead, we simply return the NEXT node from the context.
         """
         return context[NEXT]
 
-    def analyse_if(self, statement: ast.If, context: dict) -> CFNode:
+    def analyse_Assert(self, statement: ast.Assert, context: dict) -> CFNode:
+        """
+        Analyse an assert statement.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_Assign(self, statement: ast.Assign, context: dict) -> CFNode:
+        """
+        Analyse an assignment statement.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_AugAssign(self, statement: ast.AugAssign, context: dict) -> CFNode:
+        """
+        Analyse an augmented assignment statement.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_Break(self, statement: ast.Break, context: dict) -> CFNode:
+        """
+        Analyse a break statement.
+        """
+        return self.cfnode({BREAK: context[BREAK]})
+
+    def analyse_ClassDef(self, statement: ast.ClassDef, context: dict) -> CFNode:
+        """
+        Analyse a class definition.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_Continue(
+        self, statement: ast.Continue, context: dict
+    ) -> CFNode:
+        """
+        Analyse a continue statement.
+        """
+        return self.cfnode({CONTINUE: context[CONTINUE]})
+
+    def analyse_Delete(self, statement: ast.Delete, context: dict) -> CFNode:
+        """
+        Analyse a del statement.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_Expr(self, statement: ast.Expr, context: dict) -> CFNode:
+        """
+        Analyse an expression (used as a statement).
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_For(self, statement: ast.For, context: dict) -> CFNode:
+        """
+        Analyse a for statement.
+        """
+        return self._analyse_for_or_while(statement, context)
+
+    def analyse_FunctionDef(self, statement: ast.FunctionDef, context: dict) -> CFNode:
+        """
+        Analyse a function definition.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_Global(self, statement: ast.Global, context: dict) -> CFNode:
+        """
+        Analyse a global statement
+        """
+        return self._analyse_global_or_nonlocal(statement, context)
+
+    def analyse_If(self, statement: ast.If, context: dict) -> CFNode:
         """
         Analyse an if statement.
         """
@@ -155,19 +188,37 @@ class CFGraph:
             }
         )
 
-    def analyse_pass(self, statement: ast.Pass, context: dict) -> CFNode:
+    def analyse_Import(self, statement: ast.Import, context: dict) -> CFNode:
+        """
+        Analyse an import statement.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_ImportFrom(self, statement: ast.ImportFrom, context: dict) -> CFNode:
+        """
+        Analyse a from ... import statement.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_Nonlocal(self, statement: ast.Nonlocal, context: dict) -> CFNode:
+        """
+        Analyse a global statement
+        """
+        return self._analyse_global_or_nonlocal(statement, context)
+
+    def analyse_Pass(self, statement: ast.Pass, context: dict) -> CFNode:
         """
         Analyse a pass statement.
         """
         return self.cfnode({NEXT: context[NEXT]})
 
-    def analyse_raise(self, statement: ast.Raise, context: dict) -> CFNode:
+    def analyse_Raise(self, statement: ast.Raise, context: dict) -> CFNode:
         """
         Analyse a raise statement.
         """
         return self.cfnode({RAISE: context[RAISE]})
 
-    def analyse_return(self, statement: ast.Return, context: dict) -> CFNode:
+    def analyse_Return(self, statement: ast.Return, context: dict) -> CFNode:
         """
         Analyse a return statement.
         """
@@ -214,7 +265,7 @@ class CFGraph:
 
         return self.cfnode({ENTER: body_node})
 
-    def analyse_try(self, statement: ast.Try, context: dict) -> CFNode:
+    def analyse_Try(self, statement: ast.Try, context: dict) -> CFNode:
         """
         Analyse a try statement.
         """
@@ -252,7 +303,13 @@ class CFGraph:
             statement, try_except_else_context
         )
 
-    def analyse_with(self, statement: ast.With, context: dict) -> CFNode:
+    def analyse_While(self, statement: ast.While, context: dict) -> CFNode:
+        """
+        Analyse a for statement
+        """
+        return self._analyse_for_or_while(statement, context)
+
+    def analyse_With(self, statement: ast.With, context: dict) -> CFNode:
         """
         Analyse a with statement.
         """
@@ -271,7 +328,9 @@ class CFGraph:
         for statement in reversed(statements):
             statement_context = context.copy()
             statement_context[NEXT] = next
-            analyser = getattr(self, ANALYSERS[type(statement)])
+
+            method_name = "analyse_" + type(statement).__name__
+            analyser = getattr(self, method_name)
             next = analyser(statement, statement_context)
 
         return next
