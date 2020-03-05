@@ -67,6 +67,10 @@ class CFGraph:
         # is a mapping from labels to nodes.
         self.nodes = set()
         self.edges = {}
+        # We'll usually want some named nodes. (For example, for a graph
+        # representing the control flow in a function, we'll want to mark the
+        # entry and exit nodes.) Those go in the dictionary below.
+        self.context = {}
 
     def add_node(self, node):
         assert node not in self.nodes
@@ -262,27 +266,23 @@ class CFGraph:
 
         return next
 
+    @classmethod
+    def from_function(cls, ast_node):
+        """
+        Construct a control flow graph for an AST FunctionDef node.
 
-def analyse_function(ast_node):
-    """
-    Parameters
-    ----------
-    ast_node : ast.FunctionDef
-
-    Returns
-    -------
-    graph : CFGraph
-        Control flow graph for the function.
-    context : mapping from str to CFNode
-        Context for the function, giving nodes for the entry point
-        and the various exit points.
-    """
-    graph = CFGraph()
-    context = {
-        RAISE: graph.cfnode({}),
-        RETURN_VALUE: graph.cfnode({}),  # node for 'return <expr>'
-        RETURN: graph.cfnode({}),  # node for plain valueless return
-        NEXT: graph.cfnode({}),  # node for leaving by falling off the end
-    }
-    context[ENTER] = graph.analyse_statements(ast_node.body, context)
-    return graph, context
+        Parameters
+        ----------
+        ast_node : ast.FunctionDef
+            Function node in the ast tree of the code being analysed.
+        """
+        self = cls()
+        context = {
+            NEXT: self.cfnode({}),
+            RAISE: self.cfnode({}),
+            RETURN_VALUE: self.cfnode({}),
+            RETURN: self.cfnode({}),
+        }
+        context[ENTER] = self.analyse_statements(ast_node.body, context)
+        self.context = context
+        return self

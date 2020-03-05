@@ -16,7 +16,6 @@ import ast
 import unittest
 
 from cf import (
-    analyse_function,
     BREAK,
     CFGraph,
     CONTINUE,
@@ -914,8 +913,8 @@ def f(bob):
         (function_node,) = module_node.body
         (inner_function,) = function_node.body
 
-        graph, context = analyse_function(inner_function)
-        self.graph = graph
+        graph = CFGraph.from_function(inner_function)
+        context = graph.context
         node = context[ENTER]
         self.assertEqual(node, context[NEXT])
 
@@ -969,7 +968,8 @@ assert 2 is not 3
 
     def _function_context(self, code):
         ast_node = self._node_from_function(code)
-        graph, context = analyse_function(ast_node)
+        graph = CFGraph.from_function(ast_node)
+        context = graph.context
         self.graph = graph
         self.assertEqual(
             sorted(context.keys()), [ENTER, NEXT, RAISE, RETURN, RETURN_VALUE],
@@ -990,7 +990,3 @@ assert 2 is not 3
         }
         body_node = self.graph.analyse_statements(module_node.body, context)
         return context, body_node
-
-
-if __name__ == "__main__":
-    unittest.main()
