@@ -277,12 +277,26 @@ class CFGraph:
             Function node in the ast tree of the code being analysed.
         """
         self = cls()
-        context = {
-            NEXT: self.cfnode({}),
-            RAISE: self.cfnode({}),
-            RETURN_VALUE: self.cfnode({}),
-            RETURN: self.cfnode({}),
+        # Node for returns without an explicit return value.
+        return_node = self.cfnode({})
+        # Node for returns *with* an explicit return value (which could
+        # be None).
+        return_value_node = self.cfnode({})
+        # Node for exit via raise.
+        raise_node = self.cfnode({})
+
+        body_context = {
+            NEXT: return_node,
+            RAISE: raise_node,
+            RETURN: return_node,
+            RETURN_VALUE: return_value_node,
         }
-        context[ENTER] = self.analyse_statements(ast_node.body, context)
-        self.context = context
+        enter_node = self.analyse_statements(ast_node.body, body_context)
+
+        self.context = {
+            ENTER: enter_node,
+            RAISE: raise_node,
+            RETURN: return_node,
+            RETURN_VALUE: return_value_node,
+        }
         return self
