@@ -858,6 +858,33 @@ def f():
         self.assertEdge(finally_node, RAISE, context[RAISE])
         self.assertEdge(finally_node, NEXT, context[RETURN])
 
+    def test_finally_paths_combined(self):
+        # We potentially generate multiple paths for a finally block,
+        # but paths with the same NEXT should be combined.
+        code = """\
+def f():
+    try:
+        do_something()
+    except:
+        handle_error()
+    else:
+        return
+    finally:
+        do_cleanup()
+"""
+        context, try_node = self._function_context(code)
+
+        # The 'return' in the else branch should lead to the same place
+        # as the handle_exception() success in the except branch.
+        do_node = self.graph.edges[try_node][ENTER]
+        raised_node = self.graph.edges[do_node][RAISE]
+        ok_node = self.graph.edges[do_node][NEXT]
+
+        raised_next = self.graph.edges[raised_node][NEXT]
+        ok_next = self.graph.edges[ok_node][RETURN]
+
+        self.assertEqual(raised_next, ok_next)
+
     def test_statements_outside_function(self):
         code = """\
 a = calculate()

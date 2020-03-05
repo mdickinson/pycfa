@@ -230,13 +230,23 @@ class CFGraph:
         # control to wherever we would have gone if the finally were not
         # present.
 
+        # Mapping from possible finally-block end nodes to corresponding
+        # finally-block start nodes. If distinct context values have
+        # the same target, then we should use the same finally graph.
+        finally_nexts = {}
+
         for node_type in [BREAK, CONTINUE, NEXT, RAISE, RETURN, RETURN_VALUE]:
             if node_type in context:
-                finally_context = context.copy()
-                finally_context[NEXT] = context[node_type]
-                try_except_else_context[node_type] = self.analyse_statements(
-                    statement.finalbody, finally_context
-                )
+                finally_next = context[node_type]
+                if finally_next not in finally_nexts:
+                    finally_context = context.copy()
+                    finally_context[NEXT] = context[node_type]
+                    finally_nexts[finally_next] = self.analyse_statements(
+                        statement.finalbody, finally_context
+                    )
+                try_except_else_context[node_type] = finally_nexts[
+                    finally_next
+                ]
 
         return self._analyse_try_except_else(
             statement, try_except_else_context
