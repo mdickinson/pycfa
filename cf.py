@@ -212,7 +212,7 @@ class CFGraph:
         self, statement: ast.Nonlocal, context: dict
     ) -> CFNode:
         """
-        Analyse a global statement
+        Analyse a nonlocal statement
         """
         return self._analyse_global_or_nonlocal(statement, context)
 
@@ -309,7 +309,7 @@ class CFGraph:
 
     def analyse_While(self, statement: ast.While, context: dict) -> CFNode:
         """
-        Analyse a for statement
+        Analyse a while statement
         """
         return self._analyse_for_or_while(statement, context)
 
