@@ -62,6 +62,15 @@ class CFGraph:
         self._edges[node] = {}
         self._backedges[node] = set()
 
+    def remove_node(self, node):
+        """
+        Remove a node from the graph. Fails if there are edges to or
+        from that node.
+        """
+        assert not self._backedges[node]
+        assert not self._edges[node]
+        self._nodes.remove(node)
+
     def add_edge(self, source, label, target):
         """
         Add a labelled edge to the graph. Raises if an edge from the given
@@ -370,8 +379,7 @@ class CFGraph:
                     self.remove_edge(source, label, dummy_node)
                     self.add_edge(source, label, finally_node)
 
-            # XXX TODO: Delete the dummy node!
-            pass
+            self.remove_node(dummy_node)
 
         return entry_node
 
