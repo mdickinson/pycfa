@@ -345,16 +345,13 @@ class CFGraph:
 
         # For each actual node in the context (excluding duplicates),
         # create a corresponding dummy node.
-        dummy_nodes = {}
-        for node in set(context.values()):
-            dummy_nodes[node] = self.cfnode({})
+        dummy_nodes = {node: self.cfnode({}) for node in set(context.values())}
 
         # Analyse the try-except-else part of the statement using those dummy
         # nodes.
         try_except_else_context = {
             key: dummy_nodes[node] for key, node in context.items()
         }
-
         entry_node = self._analyse_try_except_else(
             statement, try_except_else_context
         )

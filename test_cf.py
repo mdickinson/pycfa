@@ -8,8 +8,6 @@ Aid in detection of things like unreachable code.
 # TODO: Better context management (more functional).
 # TODO: In tests, remove function context from code snippets where it's not
 #       needed.
-# TODO: create finally clauses lazily, instead of always creating
-#       all six.
 # TODO: graphing
 # TODO: separate out graph class
 
