@@ -38,23 +38,46 @@ class CFGraph:
     def __init__(self):
         # Representation: nodes form a set; for each node, edges[node]
         # is a mapping from labels to nodes.
-        self.nodes = set()
-        self.edges = {}
+        self._nodes = set()
+        self._edges = {}
         # We'll usually want some named nodes. (For example, for a graph
         # representing the control flow in a function, we'll want to mark the
         # entry and exit nodes.) Those go in the dictionary below.
         self.context = {}
 
+    # Graph interface
+
     def add_node(self, node):
-        assert node not in self.nodes
-        self.nodes.add(node)
-        self.edges[node] = {}
+        """
+        Add a node to the graph. Raises on an attempt to add a node that
+        already exists.
+        """
+        assert node not in self._nodes
+        self._nodes.add(node)
+        self._edges[node] = {}
 
     def add_edge(self, source, label, target):
-        source_edges = self.edges[source]
-
+        """
+        Add a labelled edge to the graph. Raises if an edge from the given
+        source, with the given label, already exists.
+        """
+        source_edges = self._edges[source]
         assert label not in source_edges
         source_edges[label] = target
+
+    def edge(self, source, label):
+        """
+        Get the target of a given edge.
+        """
+        return self._edges[source][label]
+
+    def edge_labels(self, source):
+        """
+        Get labels of all edges.
+        """
+        return set(self._edges[source].keys())
+
+    # Analysis interface
 
     def cfnode(self, edges):
         """
