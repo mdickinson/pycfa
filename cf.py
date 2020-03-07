@@ -432,7 +432,7 @@ class CFGraph:
         return next
 
     @classmethod
-    def from_function(cls, ast_node):
+    def from_function(cls, ast_node: ast.FunctionDef):
         """
         Construct a control flow graph for an AST FunctionDef node.
 
@@ -442,6 +442,7 @@ class CFGraph:
             Function node in the ast tree of the code being analysed.
         """
         self = cls()
+
         # Node for returns without an explicit return value.
         return_node = self.cfnode({})
         # Node for returns *with* an explicit return value (which could
@@ -463,5 +464,28 @@ class CFGraph:
             RAISE: raise_node,
             RETURN: return_node,
             RETURN_VALUE: return_value_node,
+        }
+        return self
+
+    @classmethod
+    def from_module(cls, ast_node: ast.Module):
+        """
+        Construct a control flow graph for an ast.Module node.
+        """
+        self = cls()
+
+        leave_node = self.cfnode({})
+        raise_node = self.cfnode({})
+
+        body_context = {
+            NEXT: leave_node,
+            RAISE: raise_node,
+        }
+        enter_node = self.analyse_statements(ast_node.body, body_context)
+
+        self.context = {
+            ENTER: enter_node,
+            NEXT: leave_node,
+            RAISE: raise_node,
         }
         return self

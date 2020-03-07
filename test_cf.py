@@ -5,8 +5,6 @@ Aid in detection of things like unreachable code.
 """
 
 # TODO: Better context management (more functional).
-# TODO: In tests, remove function context from code snippets where it's not
-#       needed.
 # TODO: graphing
 # TODO: separate out graph class
 
@@ -994,6 +992,20 @@ def f():
 
         self.assertEqual(raised_next, ok_next)
 
+    def test_empty_module(self):
+        code = ""
+        context, enter_node = self._module_context(code)
+        self.assertEqual(enter_node, context[NEXT])
+
+    def test_just_pass(self):
+        code = """\
+pass
+"""
+        context, enter_node = self._module_context(code)
+        self.assertNodetype(enter_node, ast.Pass)
+        self.assertEdges(enter_node, {NEXT})
+        self.assertEdge(enter_node, NEXT, context[NEXT])
+
     def test_statements_outside_function(self):
         code = """\
 a = calculate()
@@ -1002,7 +1014,7 @@ try:
 except:
     pass
 """
-        context, assign_node = self._statements_context(code)
+        context, assign_node = self._module_context(code)
         self.assertNodetype(assign_node, ast.Assign)
         self.assertEdges(assign_node, {NEXT, RAISE})
         self.assertEdge(assign_node, RAISE, context[RAISE])
@@ -1026,7 +1038,7 @@ except:
 with some_cm() as name:
     do_something()
 """
-        context, with_node = self._statements_context(code)
+        context, with_node = self._module_context(code)
         self.assertNodetype(with_node, ast.With)
         self.assertEdges(with_node, {ENTER, RAISE})
         self.assertEdge(with_node, RAISE, context[RAISE])
@@ -1072,7 +1084,7 @@ class A:
     pass
 assert 2 is not 3
 """
-        context, node = self._statements_context(code)
+        context, node = self._module_context(code)
 
         for _ in range(7):
             self.assertNodetype(node, ast.stmt)
@@ -1106,19 +1118,12 @@ assert 2 is not 3
 
     # Helper methods
 
-    def _node_from_function(self, function_code):
-        # Convert a function given as a code snippet to
-        # the corresponding AST tree.
-        module_node = compile(
-            function_code, "test_cf", "exec", ast.PyCF_ONLY_AST
-        )
+    def _function_context(self, code):
+        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
         (function_node,) = module_node.body
         self.assertIsInstance(function_node, ast.FunctionDef)
-        return function_node
 
-    def _function_context(self, code):
-        ast_node = self._node_from_function(code)
-        graph = CFGraph.from_function(ast_node)
+        graph = CFGraph.from_function(function_node)
         context = graph.context
         self.graph = graph
         self.assertEqual(
@@ -1130,12 +1135,17 @@ assert 2 is not 3
 
         return context, context[ENTER]
 
-    def _statements_context(self, code):
-        self.graph = CFGraph()
+    def _module_context(self, code):
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        context = {
-            NEXT: self.graph.cfnode({}),
-            RAISE: self.graph.cfnode({}),
-        }
-        body_node = self.graph.analyse_statements(module_node.body, context)
-        return context, body_node
+        self.assertIsInstance(module_node, ast.Module)
+
+        graph = CFGraph.from_module(module_node)
+        context = graph.context
+        self.graph = graph
+        self.assertEqual(
+            sorted(context.keys()), [ENTER, NEXT, RAISE],
+        )
+        self.assertEdges(context[RAISE], set())
+        self.assertEdges(context[NEXT], set())
+
+        return context, context[ENTER]
