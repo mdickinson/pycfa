@@ -68,9 +68,24 @@ class CFGraph:
             self.add_edge(node, name, target)
         return node
 
-    def _analyse_for_or_while(
-        self, statement: ast.stmt, context: dict
+    def _analyse_declaration(
+        self, statement: ast.Global, context: dict
     ) -> CFNode:
+        """
+        Analyse a declaration (a global or nonlocal statement).
+
+        These statements are non-executable, so we don't create a node
+        for them. Instead, we simply return the NEXT node from the context.
+        """
+        return context[NEXT]
+
+    def _analyse_generic(self, statement: ast.stmt, context: dict) -> CFNode:
+        """
+        Analyse a generic statement that doesn't affect control flow.
+        """
+        return self.cfnode({RAISE: context[RAISE], NEXT: context[NEXT]})
+
+    def _analyse_loop(self, statement: ast.stmt, context: dict) -> CFNode:
         """
         Analyse a loop statement (for or while).
         """
@@ -91,22 +106,35 @@ class CFGraph:
         self.add_edge(loop_node, ENTER, body_node)
         return loop_node
 
-    def _analyse_generic(self, statement: ast.stmt, context: dict) -> CFNode:
-        """
-        Analyse a generic statement that doesn't affect control flow.
-        """
-        return self.cfnode({RAISE: context[RAISE], NEXT: context[NEXT]})
-
-    def _analyse_global_or_nonlocal(
-        self, statement: ast.Global, context: dict
+    def _analyse_try_except_else(
+        self, statement: ast.Try, context: dict
     ) -> CFNode:
         """
-        Analyse a declaration (a global or nonlocal statement).
-
-        These statements are non-executable, so we don't create a node
-        for them. Instead, we simply return the NEXT node from the context.
+        Analyse the try-except-else part of a try statement. The finally
+        part is ignored, as though it weren't present.
         """
-        return context[NEXT]
+        # Process handlers backwards; raise if the last handler doesn't match.
+        raise_node = context[RAISE]
+        for handler in reversed(statement.handlers):
+            match_node = self.analyse_statements(handler.body, context)
+            if handler.type is None:
+                # Bare except always matches, never raises.
+                raise_node = match_node
+            else:
+                raise_node = self.cfnode(
+                    {
+                        RAISE: context[RAISE],
+                        MATCH: match_node,
+                        NO_MATCH: raise_node,
+                    }
+                )
+
+        body_context = context.copy()
+        body_context[RAISE] = raise_node
+        body_context[NEXT] = self.analyse_statements(statement.orelse, context)
+        body_node = self.analyse_statements(statement.body, body_context)
+
+        return self.cfnode({ENTER: body_node})
 
     def analyse_Assert(self, statement: ast.Assert, context: dict) -> CFNode:
         """
@@ -166,7 +194,7 @@ class CFGraph:
         """
         Analyse a for statement.
         """
-        return self._analyse_for_or_while(statement, context)
+        return self._analyse_loop(statement, context)
 
     def analyse_FunctionDef(
         self, statement: ast.FunctionDef, context: dict
@@ -180,7 +208,7 @@ class CFGraph:
         """
         Analyse a global statement
         """
-        return self._analyse_global_or_nonlocal(statement, context)
+        return self._analyse_declaration(statement, context)
 
     def analyse_If(self, statement: ast.If, context: dict) -> CFNode:
         """
@@ -214,7 +242,7 @@ class CFGraph:
         """
         Analyse a nonlocal statement
         """
-        return self._analyse_global_or_nonlocal(statement, context)
+        return self._analyse_declaration(statement, context)
 
     def analyse_Pass(self, statement: ast.Pass, context: dict) -> CFNode:
         """
@@ -238,36 +266,6 @@ class CFGraph:
             return self.cfnode(
                 {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
             )
-
-    def _analyse_try_except_else(
-        self, statement: ast.Try, context: dict
-    ) -> CFNode:
-        """
-        Analyse the try-except-else part of a try statement. The finally
-        part is ignored, as though it weren't present.
-        """
-        # Process handlers backwards; raise if the last handler doesn't match.
-        raise_node = context[RAISE]
-        for handler in reversed(statement.handlers):
-            match_node = self.analyse_statements(handler.body, context)
-            if handler.type is None:
-                # Bare except always matches, never raises.
-                raise_node = match_node
-            else:
-                raise_node = self.cfnode(
-                    {
-                        RAISE: context[RAISE],
-                        MATCH: match_node,
-                        NO_MATCH: raise_node,
-                    }
-                )
-
-        body_context = context.copy()
-        body_context[RAISE] = raise_node
-        body_context[NEXT] = self.analyse_statements(statement.orelse, context)
-        body_node = self.analyse_statements(statement.body, body_context)
-
-        return self.cfnode({ENTER: body_node})
 
     def analyse_Try(self, statement: ast.Try, context: dict) -> CFNode:
         """
@@ -311,7 +309,7 @@ class CFGraph:
         """
         Analyse a while statement
         """
-        return self._analyse_for_or_while(statement, context)
+        return self._analyse_loop(statement, context)
 
     def analyse_With(self, statement: ast.With, context: dict) -> CFNode:
         """
