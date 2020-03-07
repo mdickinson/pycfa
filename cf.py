@@ -106,16 +106,28 @@ class CFGraph:
 
     # Analysis interface
 
-    def cfnode(self, edges):
+    def cfnode(self, edges: dict, ast_node: ast.AST = None):
         """
         Create a new control-flow node and add it to the graph.
 
-        Returns the newly-created node.
+        Parameters
+        ----------
+        edges : dict
+            Mapping from edge labels to target nodes.
+        ast_node : ast.AST, optional
+            Linked ast node.
+
+        Returns
+        -------
+        node : CFNode
+            The newly-created node.
         """
         node = CFNode()
         self.add_node(node)
         for name, target in edges.items():
             self.add_edge(node, name, target)
+        if ast_node is not None:
+            node.ast_node = ast_node
         return node
 
     def _analyse_declaration(
@@ -133,7 +145,9 @@ class CFGraph:
         """
         Analyse a generic statement that doesn't affect control flow.
         """
-        return self.cfnode({RAISE: context[RAISE], NEXT: context[NEXT]})
+        return self.cfnode(
+            {RAISE: context[RAISE], NEXT: context[NEXT]}, ast_node=statement
+        )
 
     def _analyse_loop(self, statement: ast.stmt, context: dict) -> CFNode:
         """
@@ -144,7 +158,8 @@ class CFGraph:
                 RAISE: context[RAISE],
                 ELSE: self.analyse_statements(statement.orelse, context),
                 # The target for the ENTER edge is created below.
-            }
+            },
+            ast_node=statement,
         )
 
         body_context = context.copy()
@@ -176,7 +191,8 @@ class CFGraph:
                         RAISE: context[RAISE],
                         MATCH: match_node,
                         NO_MATCH: raise_node,
-                    }
+                    },
+                    ast_node=handler.type,
                 )
 
         body_context = context.copy()
@@ -184,7 +200,7 @@ class CFGraph:
         body_context[NEXT] = self.analyse_statements(statement.orelse, context)
         body_node = self.analyse_statements(statement.body, body_context)
 
-        return self.cfnode({ENTER: body_node})
+        return self.cfnode({ENTER: body_node}, ast_node=statement)
 
     def analyse_Assert(self, statement: ast.Assert, context: dict) -> CFNode:
         """
@@ -210,7 +226,7 @@ class CFGraph:
         """
         Analyse a break statement.
         """
-        return self.cfnode({BREAK: context[BREAK]})
+        return self.cfnode({BREAK: context[BREAK]}, ast_node=statement)
 
     def analyse_ClassDef(
         self, statement: ast.ClassDef, context: dict
@@ -226,7 +242,7 @@ class CFGraph:
         """
         Analyse a continue statement.
         """
-        return self.cfnode({CONTINUE: context[CONTINUE]})
+        return self.cfnode({CONTINUE: context[CONTINUE]}, ast_node=statement)
 
     def analyse_Delete(self, statement: ast.Delete, context: dict) -> CFNode:
         """
@@ -269,7 +285,8 @@ class CFGraph:
                 IF: self.analyse_statements(statement.body, context),
                 ELSE: self.analyse_statements(statement.orelse, context),
                 RAISE: context[RAISE],
-            }
+            },
+            ast_node=statement,
         )
 
     def analyse_Import(self, statement: ast.Import, context: dict) -> CFNode:
@@ -298,23 +315,24 @@ class CFGraph:
         """
         Analyse a pass statement.
         """
-        return self.cfnode({NEXT: context[NEXT]})
+        return self.cfnode({NEXT: context[NEXT]}, ast_node=statement)
 
     def analyse_Raise(self, statement: ast.Raise, context: dict) -> CFNode:
         """
         Analyse a raise statement.
         """
-        return self.cfnode({RAISE: context[RAISE]})
+        return self.cfnode({RAISE: context[RAISE]}, ast_node=statement)
 
     def analyse_Return(self, statement: ast.Return, context: dict) -> CFNode:
         """
         Analyse a return statement.
         """
         if statement.value is None:
-            return self.cfnode({RETURN: context[RETURN]})
+            return self.cfnode({RETURN: context[RETURN]}, ast_node=statement)
         else:
             return self.cfnode(
                 {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
+                ast_node=statement,
             )
 
     def analyse_Try(self, statement: ast.Try, context: dict) -> CFNode:
@@ -394,7 +412,8 @@ class CFGraph:
             {
                 ENTER: self.analyse_statements(statement.body, context),
                 RAISE: context[RAISE],
-            }
+            },
+            ast_node=statement,
         )
 
     def analyse_statements(self, statements: list, context: dict) -> CFNode:
