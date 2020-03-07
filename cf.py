@@ -40,6 +40,11 @@ class CFGraph:
         # is a mapping from labels to nodes.
         self._nodes = set()
         self._edges = {}
+
+        # Back-edges: mapping from each node to the *set* of edges that
+        # enter it. Edges are characterised as pairs (node, label).
+        self._backedges = {}
+
         # We'll usually want some named nodes. (For example, for a graph
         # representing the control flow in a function, we'll want to mark the
         # entry and exit nodes.) Those go in the dictionary below.
@@ -55,15 +60,22 @@ class CFGraph:
         assert node not in self._nodes
         self._nodes.add(node)
         self._edges[node] = {}
+        self._backedges[node] = set()
 
     def add_edge(self, source, label, target):
         """
         Add a labelled edge to the graph. Raises if an edge from the given
         source, with the given label, already exists.
         """
-        source_edges = self._edges[source]
-        assert label not in source_edges
-        source_edges[label] = target
+        assert label not in self._edges[source]
+        self._edges[source][label] = target
+
+        assert (source, label) not in self._backedges[target]
+        self._backedges[target].add((source, label))
+
+    def remove_edge(self, source, label, target):
+        self._backedges[target].remove((source, label))
+        self._edges[source].pop(label)
 
     def edge(self, source, label):
         """
@@ -76,6 +88,12 @@ class CFGraph:
         Get labels of all edges.
         """
         return set(self._edges[source].keys())
+
+    def edges_to(self, target):
+        """
+        Set of pairs (source, label) representing edges to this node.
+        """
+        return self._backedges[target]
 
     # Analysis interface
 
@@ -294,39 +312,68 @@ class CFGraph:
         """
         Analyse a try statement.
         """
-        try_except_else_context = context.copy()
+        # To analyse a try-except-else-finally block, it's easier to think
+        # of it as two separate pieces: it's equivalent to the try-except-else
+        # piece, nested *inside* a try-finally.
 
-        # We process the finally block several times, with a different NEXT
-        # target each time. A break / continue / raise / return in any of the
-        # try, except or else blocks will transfer control to the finally
-        # block, and then on leaving the finally block, will transfer control
-        # back to whereever it would have gone without the finally. Similarly,
-        # leaving the try/except/else compound normally again transfers control
-        # to the finally block, and then on leaving the finally, transfers
-        # control to wherever we would have gone if the finally were not
-        # present.
+        # The finally block can be entered by various different means (from
+        # a return, raise, break or continue in the try-except-else part, or
+        # from completing the try-except-else without error). For each of
+        # these different entrances to the finally block, the target on
+        # *leaving* the finally block may be different. So we will
+        # construct different paths in the control flow graph for each of
+        # the possible leave targets for the finally block. (This is similar
+        # to the way that Python >= 3.9 bytecode handles the finally.)
 
-        # Mapping from possible finally-block end nodes to corresponding
-        # finally-block start nodes. If distinct context values have
-        # the same target, then we should use the same finally graph.
-        finally_nexts = {}
+        # We also want to avoid generating *all* six possible finally paths:
+        # some of them may not be relevant. So we adopt the following approach:
 
-        for node_type in [BREAK, CONTINUE, NEXT, RAISE, RETURN, RETURN_VALUE]:
-            if node_type in context:
-                finally_next = context[node_type]
-                if finally_next not in finally_nexts:
-                    finally_context = context.copy()
-                    finally_context[NEXT] = context[node_type]
-                    finally_nexts[finally_next] = self.analyse_statements(
-                        statement.finalbody, finally_context
-                    )
-                try_except_else_context[node_type] = finally_nexts[
-                    finally_next
-                ]
+        # 1. Create dummy target nodes for the try-except-else, and analyse
+        #    the try-except-else with those dummy nodes.
+        # 2. For only the dummy nodes that are actually reached, construct
+        #    the corresponding finally paths.
+        # 3. Link up the graphs.
 
-        return self._analyse_try_except_else(
+        # For each actual node in the context (excluding duplicates),
+        # create a corresponding dummy node.
+        dummy_nodes = {}
+        for node in set(context.values()):
+            dummy_nodes[node] = self.cfnode({})
+
+        # Analyse the try-except-else part of the statement using those dummy
+        # nodes.
+        try_except_else_context = {
+            key: dummy_nodes[node] for key, node in context.items()
+        }
+
+        entry_node = self._analyse_try_except_else(
             statement, try_except_else_context
         )
+
+        # Now iterate through the dummy nodes. For those that aren't reached,
+        # remove them. For those that are, replace with the corresponding
+        # finally code. Note that there will always be at least one of the
+        # dummy nodes reachable from the try-except-else, so we'll always
+        # analyse the finally code at least once.
+
+        for end_node, dummy_node in dummy_nodes.items():
+            if self.edges_to(dummy_node):
+                # Dummy node is reachable from the try-except-else.
+                finally_context = context.copy()
+                finally_context[NEXT] = end_node
+                finally_node = self.analyse_statements(
+                    statement.finalbody, finally_context
+                )
+
+                # Make all edges to the dummy node point to the target node.
+                for source, label in list(self.edges_to(dummy_node)):
+                    self.remove_edge(source, label, dummy_node)
+                    self.add_edge(source, label, finally_node)
+
+            # XXX TODO: Delete the dummy node!
+            pass
+
+        return entry_node
 
     def analyse_While(self, statement: ast.While, context: dict) -> CFNode:
         """
