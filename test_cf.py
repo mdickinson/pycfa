@@ -1049,6 +1049,40 @@ with some_cm() as name:
         self.assertEdge(body_node, RAISE, context[RAISE])
         self.assertEdge(body_node, NEXT, context[NEXT])
 
+    def test_async_for(self):
+        code = """\
+async def f():
+    async for x in g():
+        yield x*x
+"""
+        context, for_node = self._function_context(code)
+        self.assertNodetype(for_node, ast.AsyncFor)
+        self.assertEdges(for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(for_node, ELSE, context[RETURN])
+        self.assertEdge(for_node, RAISE, context[RAISE])
+
+        yield_node = self.graph.edge(for_node, ENTER)
+        self.assertNodetype(yield_node, ast.Expr)
+        self.assertEdges(yield_node, {NEXT, RAISE})
+        self.assertEdge(yield_node, NEXT, for_node)
+        self.assertEdge(yield_node, RAISE, context[RAISE])
+
+    def test_async_with(self):
+        code = """\
+async def f():
+    async with my_async_context():
+        pass
+"""
+        context, with_node = self._function_context(code)
+        self.assertNodetype(with_node, ast.AsyncWith)
+        self.assertEdges(with_node, {ENTER, RAISE})
+        self.assertEdge(with_node, RAISE, context[RAISE])
+
+        pass_node = self.graph.edge(with_node, ENTER)
+        self.assertNodetype(pass_node, ast.Pass)
+        self.assertEdges(pass_node, {NEXT})
+        self.assertEdge(pass_node, NEXT, context[RETURN])
+
     def test_global(self):
         code = """\
 def f():
@@ -1083,10 +1117,13 @@ a += b
 class A:
     pass
 assert 2 is not 3
+x : int = 2
+async def beckett():
+    await godot()
 """
         context, node = self._module_context(code)
 
-        for _ in range(7):
+        for _ in range(9):
             self.assertNodetype(node, ast.stmt)
             self.assertEdges(node, {NEXT, RAISE})
             self.assertEdge(node, RAISE, context[RAISE])
@@ -1119,9 +1156,12 @@ assert 2 is not 3
     # Helper methods
 
     def _function_context(self, code):
-        module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
-        (function_node,) = module_node.body
-        self.assertIsInstance(function_node, ast.FunctionDef)
+        (function_node,) = compile(
+            code, "test_cf", "exec", ast.PyCF_ONLY_AST
+        ).body
+        self.assertIsInstance(
+            function_node, (ast.AsyncFunctionDef, ast.FunctionDef)
+        )
 
         graph = CFGraph.from_function(function_node)
         context = graph.context

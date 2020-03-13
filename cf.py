@@ -202,6 +202,26 @@ class CFGraph:
 
         return self.cfnode({ENTER: body_node}, ast_node=statement)
 
+    def _analyse_with(self, statement: ast.stmt, context: dict) -> CFNode:
+        """
+        Analyse a with or async with statement.
+        """
+        return self.cfnode(
+            {
+                ENTER: self.analyse_statements(statement.body, context),
+                RAISE: context[RAISE],
+            },
+            ast_node=statement,
+        )
+
+    def analyse_AnnAssign(
+        self, statement: ast.AnnAssign, context: dict
+    ) -> CFNode:
+        """
+        Analyse an annotated assignment statement.
+        """
+        return self._analyse_generic(statement, context)
+
     def analyse_Assert(self, statement: ast.Assert, context: dict) -> CFNode:
         """
         Analyse an assert statement.
@@ -213,6 +233,30 @@ class CFGraph:
         Analyse an assignment statement.
         """
         return self._analyse_generic(statement, context)
+
+    def analyse_AsyncFor(
+        self, statement: ast.AsyncFor, context: dict
+    ) -> CFNode:
+        """
+        Analyse an async for statement.
+        """
+        return self._analyse_loop(statement, context)
+
+    def analyse_AsyncFunctionDef(
+        self, statement: ast.AsyncFunctionDef, context: dict
+    ) -> CFNode:
+        """
+        Analyse an async function (coroutine) definition.
+        """
+        return self._analyse_generic(statement, context)
+
+    def analyse_AsyncWith(
+        self, statement: ast.AsyncWith, context: dict
+    ) -> CFNode:
+        """
+        Analyse an async with statement.
+        """
+        return self._analyse_with(statement, context)
 
     def analyse_AugAssign(
         self, statement: ast.AugAssign, context: dict
@@ -408,13 +452,7 @@ class CFGraph:
         """
         Analyse a with statement.
         """
-        return self.cfnode(
-            {
-                ENTER: self.analyse_statements(statement.body, context),
-                RAISE: context[RAISE],
-            },
-            ast_node=statement,
-        )
+        return self._analyse_with(statement, context)
 
     def analyse_statements(self, statements: list, context: dict) -> CFNode:
         """
@@ -434,11 +472,11 @@ class CFGraph:
     @classmethod
     def from_function(cls, ast_node: ast.FunctionDef):
         """
-        Construct a control flow graph for an AST FunctionDef node.
+        Construct a control flow graph for a function or coroutine AST node.
 
         Parameters
         ----------
-        ast_node : ast.FunctionDef
+        ast_node : ast.FunctionDef or ast.AsyncFunctionDef
             Function node in the ast tree of the code being analysed.
         """
         self = cls()
