@@ -3,7 +3,10 @@ Analyse control flow for a piece of Python code.
 
 Aid in detection of things like unreachable code.
 """
+from __future__ import annotations
+
 import ast
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 # Constants used as both edge and context labels.
 BREAK = "break"
@@ -26,6 +29,15 @@ class CFNode:
     A node on the control flow graph.
     """
 
+    ast_node: Optional[ast.AST]
+
+    def __init__(self, ast_node: Optional[ast.AST] = None) -> None:
+        self.ast_node = ast_node
+
+
+# Type alias for analysis contexts.
+Context = Dict[str, CFNode]
+
 
 class CFGraph:
     """
@@ -35,14 +47,14 @@ class CFGraph:
     Most nodes will correspond directly to an AST statement.
     """
 
-    def __init__(self):
-        # Representation: nodes form a set; for each node, edges[node]
-        # is a mapping from labels to nodes.
+    _nodes: Set[CFNode]
+    _edges: Dict[CFNode, Dict[str, CFNode]]
+    _backedges: Dict[CFNode, Set[Tuple[CFNode, str]]]
+    context: Context
+
+    def __init__(self) -> None:
         self._nodes = set()
         self._edges = {}
-
-        # Back-edges: mapping from each node to the *set* of edges that
-        # enter it. Edges are characterised as pairs (node, label).
         self._backedges = {}
 
         # We'll usually want some named nodes. (For example, for a graph
@@ -52,7 +64,7 @@ class CFGraph:
 
     # Graph interface
 
-    def add_node(self, node):
+    def add_node(self, node: CFNode) -> None:
         """
         Add a node to the graph. Raises on an attempt to add a node that
         already exists.
@@ -62,7 +74,7 @@ class CFGraph:
         self._edges[node] = {}
         self._backedges[node] = set()
 
-    def remove_node(self, node):
+    def remove_node(self, node: CFNode) -> None:
         """
         Remove a node from the graph. Fails if there are edges to or
         from that node.
@@ -71,7 +83,7 @@ class CFGraph:
         assert not self._edges[node]
         self._nodes.remove(node)
 
-    def add_edge(self, source, label, target):
+    def add_edge(self, source: CFNode, label: str, target: CFNode) -> None:
         """
         Add a labelled edge to the graph. Raises if an edge from the given
         source, with the given label, already exists.
@@ -82,23 +94,23 @@ class CFGraph:
         assert (source, label) not in self._backedges[target]
         self._backedges[target].add((source, label))
 
-    def remove_edge(self, source, label, target):
+    def remove_edge(self, source: CFNode, label: str, target: CFNode) -> None:
         self._backedges[target].remove((source, label))
         self._edges[source].pop(label)
 
-    def edge(self, source, label):
+    def edge(self, source: CFNode, label: str) -> CFNode:
         """
         Get the target of a given edge.
         """
         return self._edges[source][label]
 
-    def edge_labels(self, source):
+    def edge_labels(self, source: CFNode) -> Set[str]:
         """
         Get labels of all edges.
         """
         return set(self._edges[source].keys())
 
-    def edges_to(self, target):
+    def edges_to(self, target: CFNode) -> Set[Tuple[CFNode, str]]:
         """
         Set of pairs (source, label) representing edges to this node.
         """
@@ -106,7 +118,9 @@ class CFGraph:
 
     # Analysis interface
 
-    def cfnode(self, edges: dict, ast_node: ast.AST = None):
+    def cfnode(
+        self, edges: Dict[str, CFNode], ast_node: Optional[ast.AST] = None
+    ) -> CFNode:
         """
         Create a new control-flow node and add it to the graph.
 
@@ -122,16 +136,14 @@ class CFGraph:
         node : CFNode
             The newly-created node.
         """
-        node = CFNode()
+        node = CFNode(ast_node=ast_node)
         self.add_node(node)
         for name, target in edges.items():
             self.add_edge(node, name, target)
-        if ast_node is not None:
-            node.ast_node = ast_node
         return node
 
     def _analyse_declaration(
-        self, statement: ast.Global, context: dict
+        self, statement: Union[ast.Global, ast.Nonlocal], context: Context
     ) -> CFNode:
         """
         Analyse a declaration (a global or nonlocal statement).
@@ -141,7 +153,9 @@ class CFGraph:
         """
         return context[NEXT]
 
-    def _analyse_generic(self, statement: ast.stmt, context: dict) -> CFNode:
+    def _analyse_generic(
+        self, statement: ast.stmt, context: Context
+    ) -> CFNode:
         """
         Analyse a generic statement that doesn't affect control flow.
         """
@@ -149,7 +163,11 @@ class CFGraph:
             {RAISE: context[RAISE], NEXT: context[NEXT]}, ast_node=statement
         )
 
-    def _analyse_loop(self, statement: ast.stmt, context: dict) -> CFNode:
+    def _analyse_loop(
+        self,
+        statement: Union[ast.AsyncFor, ast.For, ast.While],
+        context: Context,
+    ) -> CFNode:
         """
         Analyse a loop statement (for or while).
         """
@@ -172,7 +190,7 @@ class CFGraph:
         return loop_node
 
     def _analyse_try_except_else(
-        self, statement: ast.Try, context: dict
+        self, statement: ast.Try, context: Context
     ) -> CFNode:
         """
         Analyse the try-except-else part of a try statement. The finally
@@ -202,7 +220,9 @@ class CFGraph:
 
         return self.cfnode({ENTER: body_node}, ast_node=statement)
 
-    def _analyse_with(self, statement: ast.stmt, context: dict) -> CFNode:
+    def _analyse_with(
+        self, statement: Union[ast.AsyncWith, ast.With], context: Context
+    ) -> CFNode:
         """
         Analyse a with or async with statement.
         """
@@ -215,27 +235,31 @@ class CFGraph:
         )
 
     def analyse_AnnAssign(
-        self, statement: ast.AnnAssign, context: dict
+        self, statement: ast.AnnAssign, context: Context
     ) -> CFNode:
         """
         Analyse an annotated assignment statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Assert(self, statement: ast.Assert, context: dict) -> CFNode:
+    def analyse_Assert(
+        self, statement: ast.Assert, context: Context
+    ) -> CFNode:
         """
         Analyse an assert statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Assign(self, statement: ast.Assign, context: dict) -> CFNode:
+    def analyse_Assign(
+        self, statement: ast.Assign, context: Context
+    ) -> CFNode:
         """
         Analyse an assignment statement.
         """
         return self._analyse_generic(statement, context)
 
     def analyse_AsyncFor(
-        self, statement: ast.AsyncFor, context: dict
+        self, statement: ast.AsyncFor, context: Context
     ) -> CFNode:
         """
         Analyse an async for statement.
@@ -243,7 +267,7 @@ class CFGraph:
         return self._analyse_loop(statement, context)
 
     def analyse_AsyncFunctionDef(
-        self, statement: ast.AsyncFunctionDef, context: dict
+        self, statement: ast.AsyncFunctionDef, context: Context
     ) -> CFNode:
         """
         Analyse an async function (coroutine) definition.
@@ -251,7 +275,7 @@ class CFGraph:
         return self._analyse_generic(statement, context)
 
     def analyse_AsyncWith(
-        self, statement: ast.AsyncWith, context: dict
+        self, statement: ast.AsyncWith, context: Context
     ) -> CFNode:
         """
         Analyse an async with statement.
@@ -259,21 +283,21 @@ class CFGraph:
         return self._analyse_with(statement, context)
 
     def analyse_AugAssign(
-        self, statement: ast.AugAssign, context: dict
+        self, statement: ast.AugAssign, context: Context
     ) -> CFNode:
         """
         Analyse an augmented assignment statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Break(self, statement: ast.Break, context: dict) -> CFNode:
+    def analyse_Break(self, statement: ast.Break, context: Context) -> CFNode:
         """
         Analyse a break statement.
         """
         return self.cfnode({BREAK: context[BREAK]}, ast_node=statement)
 
     def analyse_ClassDef(
-        self, statement: ast.ClassDef, context: dict
+        self, statement: ast.ClassDef, context: Context
     ) -> CFNode:
         """
         Analyse a class definition.
@@ -281,46 +305,50 @@ class CFGraph:
         return self._analyse_generic(statement, context)
 
     def analyse_Continue(
-        self, statement: ast.Continue, context: dict
+        self, statement: ast.Continue, context: Context
     ) -> CFNode:
         """
         Analyse a continue statement.
         """
         return self.cfnode({CONTINUE: context[CONTINUE]}, ast_node=statement)
 
-    def analyse_Delete(self, statement: ast.Delete, context: dict) -> CFNode:
+    def analyse_Delete(
+        self, statement: ast.Delete, context: Context
+    ) -> CFNode:
         """
         Analyse a del statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Expr(self, statement: ast.Expr, context: dict) -> CFNode:
+    def analyse_Expr(self, statement: ast.Expr, context: Context) -> CFNode:
         """
         Analyse an expression (used as a statement).
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_For(self, statement: ast.For, context: dict) -> CFNode:
+    def analyse_For(self, statement: ast.For, context: Context) -> CFNode:
         """
         Analyse a for statement.
         """
         return self._analyse_loop(statement, context)
 
     def analyse_FunctionDef(
-        self, statement: ast.FunctionDef, context: dict
+        self, statement: ast.FunctionDef, context: Context
     ) -> CFNode:
         """
         Analyse a function definition.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Global(self, statement: ast.Global, context: dict) -> CFNode:
+    def analyse_Global(
+        self, statement: ast.Global, context: Context
+    ) -> CFNode:
         """
         Analyse a global statement
         """
         return self._analyse_declaration(statement, context)
 
-    def analyse_If(self, statement: ast.If, context: dict) -> CFNode:
+    def analyse_If(self, statement: ast.If, context: Context) -> CFNode:
         """
         Analyse an if statement.
         """
@@ -333,14 +361,16 @@ class CFGraph:
             ast_node=statement,
         )
 
-    def analyse_Import(self, statement: ast.Import, context: dict) -> CFNode:
+    def analyse_Import(
+        self, statement: ast.Import, context: Context
+    ) -> CFNode:
         """
         Analyse an import statement.
         """
         return self._analyse_generic(statement, context)
 
     def analyse_ImportFrom(
-        self, statement: ast.ImportFrom, context: dict
+        self, statement: ast.ImportFrom, context: Context
     ) -> CFNode:
         """
         Analyse a from ... import statement.
@@ -348,26 +378,28 @@ class CFGraph:
         return self._analyse_generic(statement, context)
 
     def analyse_Nonlocal(
-        self, statement: ast.Nonlocal, context: dict
+        self, statement: ast.Nonlocal, context: Context
     ) -> CFNode:
         """
         Analyse a nonlocal statement
         """
         return self._analyse_declaration(statement, context)
 
-    def analyse_Pass(self, statement: ast.Pass, context: dict) -> CFNode:
+    def analyse_Pass(self, statement: ast.Pass, context: Context) -> CFNode:
         """
         Analyse a pass statement.
         """
         return self.cfnode({NEXT: context[NEXT]}, ast_node=statement)
 
-    def analyse_Raise(self, statement: ast.Raise, context: dict) -> CFNode:
+    def analyse_Raise(self, statement: ast.Raise, context: Context) -> CFNode:
         """
         Analyse a raise statement.
         """
         return self.cfnode({RAISE: context[RAISE]}, ast_node=statement)
 
-    def analyse_Return(self, statement: ast.Return, context: dict) -> CFNode:
+    def analyse_Return(
+        self, statement: ast.Return, context: Context
+    ) -> CFNode:
         """
         Analyse a return statement.
         """
@@ -379,7 +411,7 @@ class CFGraph:
                 ast_node=statement,
             )
 
-    def analyse_Try(self, statement: ast.Try, context: dict) -> CFNode:
+    def analyse_Try(self, statement: ast.Try, context: Context) -> CFNode:
         """
         Analyse a try statement.
         """
@@ -442,19 +474,21 @@ class CFGraph:
 
         return entry_node
 
-    def analyse_While(self, statement: ast.While, context: dict) -> CFNode:
+    def analyse_While(self, statement: ast.While, context: Context) -> CFNode:
         """
         Analyse a while statement
         """
         return self._analyse_loop(statement, context)
 
-    def analyse_With(self, statement: ast.With, context: dict) -> CFNode:
+    def analyse_With(self, statement: ast.With, context: Context) -> CFNode:
         """
         Analyse a with statement.
         """
         return self._analyse_with(statement, context)
 
-    def analyse_statements(self, statements: list, context: dict) -> CFNode:
+    def analyse_statements(
+        self, statements: List[ast.stmt], context: Context
+    ) -> CFNode:
         """
         Analyse a sequence of statements.
         """
@@ -470,7 +504,9 @@ class CFGraph:
         return next
 
     @classmethod
-    def from_function(cls, ast_node: ast.FunctionDef):
+    def from_function(
+        cls, ast_node: Union[ast.AsyncFunctionDef, ast.FunctionDef]
+    ) -> CFGraph:
         """
         Construct a control flow graph for a function or coroutine AST node.
 
@@ -506,7 +542,7 @@ class CFGraph:
         return self
 
     @classmethod
-    def from_module(cls, ast_node: ast.Module):
+    def from_module(cls, ast_node: ast.Module) -> CFGraph:
         """
         Construct a control flow graph for an ast.Module node.
         """
