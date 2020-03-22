@@ -4,7 +4,6 @@ Analyse control flow for a piece of Python code.
 Aid in detection of things like unreachable code.
 """
 
-# TODO: move edge labels to cfgraph?
 # TODO: add node types, and document edge labels for each node type?
 
 # TODO: Better context management (more functional).

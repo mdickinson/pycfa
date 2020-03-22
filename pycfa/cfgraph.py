@@ -15,7 +15,7 @@ on the node type.
 Each node can optionally contain a link to an underlying AST node. (But
 note that distinct CFNodes can link to the same AST node.)
 
-There are four node types:
+There are four possible labels, and four node types:
 
 - GENERIC nodes have outward labels NEXT and RAISE
 - SIMPLE nodes have only a NEXT label (
@@ -27,6 +27,21 @@ There are four node types:
 
 import ast
 from typing import Dict, Optional, Set, Tuple
+
+
+# Edge labels
+
+#: Link to the next statement (if no errors occurred)
+NEXT = "next"
+
+#: Link followed if an error is raised.
+RAISE = "raise"
+
+#: Link followed to enter an if / for / while / except block
+ENTER = "enter"
+
+#: Link followed when a condition does not apply
+ELSE = "else"
 
 
 class CFNode:

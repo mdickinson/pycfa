@@ -8,19 +8,13 @@ from __future__ import annotations
 import ast
 from typing import Dict, List, Optional, Set, Union
 
-from pycfa.cfgraph import CFGraph, CFNode
+from pycfa.cfgraph import CFGraph, CFNode, ELSE, ENTER, NEXT, RAISE
 
-# Constants used as both edge and context labels.
+# Context labels
 BREAK = "break"
 CONTINUE = "continue"
-NEXT = "next"
-RAISE = "raise"
 RETURN = "return"
 RETURN_VALUE = "return_value"
-
-# Constants used only as edge labels.
-ELSE = "else"
-ENTER = "enter"
 
 
 # Type alias for analysis contexts.
