@@ -8,6 +8,7 @@ Aid in detection of things like unreachable code.
 # TODO: graphing
 # TODO: ClassDef nodes
 # TODO: package structure
+# TODO: remove use of self.graph in tests
 
 
 import ast
