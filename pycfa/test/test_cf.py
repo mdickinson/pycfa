@@ -4,11 +4,17 @@ Analyse control flow for a piece of Python code.
 Aid in detection of things like unreachable code.
 """
 
+# TODO: move edge labels to cfgraph?
+# TODO: add node types, and document edge labels for each node type?
+# TODO: make break/continue have only NEXT edge labels?
+
+
 # TODO: Better context management (more functional).
 # TODO: graphing
 # TODO: ClassDef nodes
 # TODO: package structure
 # TODO: remove use of self.graph in tests
+
 
 
 import ast
