@@ -39,30 +39,19 @@ class CFNode:
 Context = Dict[str, CFNode]
 
 
-class CFAnalysis:
+class CFGraph:
     """
-    The control-flow analysis.
-
-    This is a directed graph (not necessarily acyclic) with labelled edges.
-    Most nodes will correspond directly to an AST statement.
+    The digraph underlying the control flow graph.
     """
 
     _nodes: Set[CFNode]
     _edges: Dict[CFNode, Dict[str, CFNode]]
     _backedges: Dict[CFNode, Set[Tuple[CFNode, str]]]
-    context: Context
 
     def __init__(self) -> None:
         self._nodes = set()
         self._edges = {}
         self._backedges = {}
-
-        # We'll usually want some named nodes. (For example, for a graph
-        # representing the control flow in a function, we'll want to mark the
-        # entry and exit nodes.) Those go in the dictionary below.
-        self.context = {}
-
-    # Graph interface
 
     def add_node(self, node: CFNode) -> None:
         """
@@ -116,9 +105,40 @@ class CFAnalysis:
         """
         return self._backedges[target]
 
-    # Analysis interface
 
-    def cfnode(
+class CFAnalysis:
+    """
+    The control-flow analysis.
+
+    This is a directed graph (not necessarily acyclic) with labelled edges.
+    Most nodes will correspond directly to an AST statement.
+    """
+
+    _graph: CFGraph
+
+    context: Context
+
+    def __init__(self) -> None:
+        self._graph = CFGraph()
+
+        # We'll usually want some named nodes. (For example, for a graph
+        # representing the control flow in a function, we'll want to mark the
+        # entry and exit nodes.) Those go in the dictionary below.
+        self.context = {}
+
+    def edge(self, source: CFNode, label: str) -> CFNode:
+        """
+        Get the target of a given edge.
+        """
+        return self._graph.edge(source, label)
+
+    def edge_labels(self, source: CFNode) -> Set[str]:
+        """
+        Get labels of all edges.
+        """
+        return self._graph.edge_labels(source)
+
+    def new_node(
         self, edges: Dict[str, CFNode], ast_node: Optional[ast.AST] = None
     ) -> CFNode:
         """
@@ -137,9 +157,9 @@ class CFAnalysis:
             The newly-created node.
         """
         node = CFNode(ast_node=ast_node)
-        self.add_node(node)
+        self._graph.add_node(node)
         for name, target in edges.items():
-            self.add_edge(node, name, target)
+            self._graph.add_edge(node, name, target)
         return node
 
     def _analyse_declaration(
@@ -159,7 +179,7 @@ class CFAnalysis:
         """
         Analyse a generic statement that doesn't affect control flow.
         """
-        return self.cfnode(
+        return self.new_node(
             {RAISE: context[RAISE], NEXT: context[NEXT]}, ast_node=statement
         )
 
@@ -171,7 +191,7 @@ class CFAnalysis:
         """
         Analyse a loop statement (for or while).
         """
-        loop_node = self.cfnode(
+        loop_node = self.new_node(
             {
                 RAISE: context[RAISE],
                 ELSE: self.analyse_statements(statement.orelse, context),
@@ -186,7 +206,7 @@ class CFAnalysis:
         body_context[NEXT] = loop_node
         body_node = self.analyse_statements(statement.body, body_context)
 
-        self.add_edge(loop_node, ENTER, body_node)
+        self._graph.add_edge(loop_node, ENTER, body_node)
         return loop_node
 
     def _analyse_try_except_else(
@@ -204,7 +224,7 @@ class CFAnalysis:
                 # Bare except always matches, never raises.
                 raise_node = match_node
             else:
-                raise_node = self.cfnode(
+                raise_node = self.new_node(
                     {
                         RAISE: context[RAISE],
                         MATCH: match_node,
@@ -218,7 +238,7 @@ class CFAnalysis:
         body_context[NEXT] = self.analyse_statements(statement.orelse, context)
         body_node = self.analyse_statements(statement.body, body_context)
 
-        return self.cfnode({ENTER: body_node}, ast_node=statement)
+        return self.new_node({ENTER: body_node}, ast_node=statement)
 
     def _analyse_with(
         self, statement: Union[ast.AsyncWith, ast.With], context: Context
@@ -226,7 +246,7 @@ class CFAnalysis:
         """
         Analyse a with or async with statement.
         """
-        return self.cfnode(
+        return self.new_node(
             {
                 ENTER: self.analyse_statements(statement.body, context),
                 RAISE: context[RAISE],
@@ -294,7 +314,7 @@ class CFAnalysis:
         """
         Analyse a break statement.
         """
-        return self.cfnode({BREAK: context[BREAK]}, ast_node=statement)
+        return self.new_node({BREAK: context[BREAK]}, ast_node=statement)
 
     def analyse_ClassDef(
         self, statement: ast.ClassDef, context: Context
@@ -310,7 +330,7 @@ class CFAnalysis:
         """
         Analyse a continue statement.
         """
-        return self.cfnode({CONTINUE: context[CONTINUE]}, ast_node=statement)
+        return self.new_node({CONTINUE: context[CONTINUE]}, ast_node=statement)
 
     def analyse_Delete(
         self, statement: ast.Delete, context: Context
@@ -352,7 +372,7 @@ class CFAnalysis:
         """
         Analyse an if statement.
         """
-        return self.cfnode(
+        return self.new_node(
             {
                 IF: self.analyse_statements(statement.body, context),
                 ELSE: self.analyse_statements(statement.orelse, context),
@@ -389,13 +409,13 @@ class CFAnalysis:
         """
         Analyse a pass statement.
         """
-        return self.cfnode({NEXT: context[NEXT]}, ast_node=statement)
+        return self.new_node({NEXT: context[NEXT]}, ast_node=statement)
 
     def analyse_Raise(self, statement: ast.Raise, context: Context) -> CFNode:
         """
         Analyse a raise statement.
         """
-        return self.cfnode({RAISE: context[RAISE]}, ast_node=statement)
+        return self.new_node({RAISE: context[RAISE]}, ast_node=statement)
 
     def analyse_Return(
         self, statement: ast.Return, context: Context
@@ -404,9 +424,9 @@ class CFAnalysis:
         Analyse a return statement.
         """
         if statement.value is None:
-            return self.cfnode({RETURN: context[RETURN]}, ast_node=statement)
+            return self.new_node({RETURN: context[RETURN]}, ast_node=statement)
         else:
-            return self.cfnode(
+            return self.new_node(
                 {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
                 ast_node=statement,
             )
@@ -439,7 +459,9 @@ class CFAnalysis:
 
         # For each actual node in the context (excluding duplicates),
         # create a corresponding dummy node.
-        dummy_nodes = {node: self.cfnode({}) for node in set(context.values())}
+        dummy_nodes = {
+            node: self.new_node({}) for node in set(context.values())
+        }
 
         # Analyse the try-except-else part of the statement using those dummy
         # nodes.
@@ -457,7 +479,8 @@ class CFAnalysis:
         # analyse the finally code at least once.
 
         for end_node, dummy_node in dummy_nodes.items():
-            if self.edges_to(dummy_node):
+            edges_to_dummy = self._graph.edges_to(dummy_node)
+            if edges_to_dummy:
                 # Dummy node is reachable from the try-except-else.
                 finally_context = context.copy()
                 finally_context[NEXT] = end_node
@@ -466,11 +489,11 @@ class CFAnalysis:
                 )
 
                 # Make all edges to the dummy node point to the target node.
-                for source, label in list(self.edges_to(dummy_node)):
-                    self.remove_edge(source, label, dummy_node)
-                    self.add_edge(source, label, finally_node)
+                for source, label in edges_to_dummy.copy():
+                    self._graph.remove_edge(source, label, dummy_node)
+                    self._graph.add_edge(source, label, finally_node)
 
-            self.remove_node(dummy_node)
+            self._graph.remove_node(dummy_node)
 
         return entry_node
 
@@ -518,12 +541,12 @@ class CFAnalysis:
         self = cls()
 
         # Node for returns without an explicit return value.
-        return_node = self.cfnode({})
+        return_node = self.new_node({})
         # Node for returns *with* an explicit return value (which could
         # be None).
-        return_value_node = self.cfnode({})
+        return_value_node = self.new_node({})
         # Node for exit via raise.
-        raise_node = self.cfnode({})
+        raise_node = self.new_node({})
 
         body_context = {
             NEXT: return_node,
@@ -548,8 +571,8 @@ class CFAnalysis:
         """
         self = cls()
 
-        leave_node = self.cfnode({})
-        raise_node = self.cfnode({})
+        leave_node = self.new_node({})
+        raise_node = self.new_node({})
 
         body_context = {
             NEXT: leave_node,

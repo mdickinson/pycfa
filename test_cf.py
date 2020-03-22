@@ -6,7 +6,6 @@ Aid in detection of things like unreachable code.
 
 # TODO: Better context management (more functional).
 # TODO: graphing
-# TODO: separate out graph class
 # TODO: ClassDef nodes
 # TODO: package structure
 
