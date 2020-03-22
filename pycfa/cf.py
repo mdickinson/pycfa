@@ -71,11 +71,7 @@ class CFAnalysis:
         node : CFNode
             The newly-created node.
         """
-        node = CFNode(ast_node=ast_node)
-        self._graph.add_node(node)
-        for name, target in edges.items():
-            self._graph.add_edge(node, name, target)
-        return node
+        return self._graph.new_node(edges, ast_node=ast_node)
 
     def _analyse_declaration(
         self, statement: Union[ast.Global, ast.Nonlocal], context: Context
@@ -106,22 +102,25 @@ class CFAnalysis:
         """
         Analyse a loop statement (for or while).
         """
+        dummy_node = self.new_node({})
+
+        body_context = context.copy()
+        body_context[BREAK] = context[NEXT]
+        body_context[CONTINUE] = dummy_node
+        body_context[NEXT] = dummy_node
+        body_node = self.analyse_statements(statement.body, body_context)
+
         loop_node = self.new_node(
             {
                 RAISE: context[RAISE],
                 ELSE: self.analyse_statements(statement.orelse, context),
-                # The target for the ENTER edge is created below.
+                ENTER: body_node,
             },
             ast_node=statement,
         )
 
-        body_context = context.copy()
-        body_context[BREAK] = context[NEXT]
-        body_context[CONTINUE] = loop_node
-        body_context[NEXT] = loop_node
-        body_node = self.analyse_statements(statement.body, body_context)
+        self._graph.collapse_node(dummy_node, loop_node)
 
-        self._graph.add_edge(loop_node, ENTER, body_node)
         return loop_node
 
     def _analyse_try_except_else(
@@ -394,8 +393,7 @@ class CFAnalysis:
         # analyse the finally code at least once.
 
         for end_node, dummy_node in dummy_nodes.items():
-            edges_to_dummy = self._graph.edges_to(dummy_node)
-            if edges_to_dummy:
+            if self._graph.edges_to(dummy_node):
                 # Dummy node is reachable from the try-except-else.
                 finally_context = context.copy()
                 finally_context[NEXT] = end_node
@@ -403,12 +401,9 @@ class CFAnalysis:
                     statement.finalbody, finally_context
                 )
 
-                # Make all edges to the dummy node point to the target node.
-                for source, label in edges_to_dummy.copy():
-                    self._graph.remove_edge(source, label, dummy_node)
-                    self._graph.add_edge(source, label, finally_node)
-
-            self._graph.remove_node(dummy_node)
+                self._graph.collapse_node(dummy_node, finally_node)
+            else:
+                self._graph.remove_node(dummy_node)
 
         return entry_node
 
