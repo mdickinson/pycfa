@@ -14,7 +14,7 @@ Aid in detection of things like unreachable code.
 import ast
 import unittest
 
-from cf import (
+from pycfa.cf import (
     BREAK,
     CFAnalysis,
     CONTINUE,
