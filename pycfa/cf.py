@@ -238,7 +238,7 @@ class CFAnalysis:
         """
         Analyse a break statement.
         """
-        return self.new_node({BREAK: context[BREAK]}, ast_node=statement)
+        return self.new_node({NEXT: context[BREAK]}, ast_node=statement)
 
     def analyse_ClassDef(
         self, statement: ast.ClassDef, context: Context
@@ -254,7 +254,7 @@ class CFAnalysis:
         """
         Analyse a continue statement.
         """
-        return self.new_node({CONTINUE: context[CONTINUE]}, ast_node=statement)
+        return self.new_node({NEXT: context[CONTINUE]}, ast_node=statement)
 
     def analyse_Delete(
         self, statement: ast.Delete, context: Context

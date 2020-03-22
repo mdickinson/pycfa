@@ -6,8 +6,6 @@ Aid in detection of things like unreachable code.
 
 # TODO: move edge labels to cfgraph?
 # TODO: add node types, and document edge labels for each node type?
-# TODO: make break/continue have only NEXT edge labels?
-
 
 # TODO: Better context management (more functional).
 # TODO: graphing
@@ -20,9 +18,7 @@ import ast
 import unittest
 
 from pycfa.cf import (
-    BREAK,
     CFAnalysis,
-    CONTINUE,
     ELSE,
     ENTER,
     IF,
@@ -327,8 +323,8 @@ def f():
 
         continue_node = self.graph.edge(test_node, IF)
         self.assertNodetype(continue_node, ast.Continue)
-        self.assertEdges(continue_node, {CONTINUE})
-        self.assertEdge(continue_node, CONTINUE, while_node)
+        self.assertEdges(continue_node, {NEXT})
+        self.assertEdge(continue_node, NEXT, while_node)
 
         body_node = self.graph.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
@@ -364,8 +360,8 @@ def f():
 
         break_node = self.graph.edge(test_node, IF)
         self.assertNodetype(break_node, ast.Break)
-        self.assertEdges(break_node, {BREAK})
-        self.assertEdge(break_node, BREAK, context[RETURN])
+        self.assertEdges(break_node, {NEXT})
+        self.assertEdge(break_node, NEXT, context[RETURN])
 
         body_node = self.graph.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
@@ -425,8 +421,8 @@ def f():
 
         continue_node = self.graph.edge(test_node, IF)
         self.assertNodetype(continue_node, ast.Continue)
-        self.assertEdges(continue_node, {CONTINUE})
-        self.assertEdge(continue_node, CONTINUE, for_node)
+        self.assertEdges(continue_node, {NEXT})
+        self.assertEdge(continue_node, NEXT, for_node)
 
         body_node = self.graph.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
@@ -462,8 +458,8 @@ def f():
 
         break_node = self.graph.edge(test_node, IF)
         self.assertNodetype(break_node, ast.Break)
-        self.assertEdges(break_node, {BREAK})
-        self.assertEdge(break_node, BREAK, context[RETURN])
+        self.assertEdges(break_node, {NEXT})
+        self.assertEdge(break_node, NEXT, context[RETURN])
 
         body_node = self.graph.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
@@ -687,9 +683,9 @@ def f():
 
         break_node = self.graph.edge(try_node, ENTER)
         self.assertNodetype(break_node, ast.Break)
-        self.assertEdges(break_node, {BREAK})
+        self.assertEdges(break_node, {NEXT})
 
-        finally_node = self.graph.edge(break_node, BREAK)
+        finally_node = self.graph.edge(break_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
@@ -715,9 +711,9 @@ def f():
 
         continue_node = self.graph.edge(try_node, ENTER)
         self.assertNodetype(continue_node, ast.Continue)
-        self.assertEdges(continue_node, {CONTINUE})
+        self.assertEdges(continue_node, {NEXT})
 
-        finally_node = self.graph.edge(continue_node, CONTINUE)
+        finally_node = self.graph.edge(continue_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
@@ -803,8 +799,8 @@ def f():
         self.assertEdges(return_node, {RETURN})
 
         break_node = self.graph.edge(return_node, RETURN)
-        self.assertEdges(break_node, {BREAK})
-        self.assertEdge(break_node, BREAK, context[RETURN])
+        self.assertEdges(break_node, {NEXT})
+        self.assertEdge(break_node, NEXT, context[RETURN])
 
     def test_continue_in_finally(self):
         code = """\
@@ -829,8 +825,8 @@ def f():
         self.assertEdges(raise_node, {RAISE})
 
         continue_node = self.graph.edge(raise_node, RAISE)
-        self.assertEdges(continue_node, {CONTINUE})
-        self.assertEdge(continue_node, CONTINUE, for_node)
+        self.assertEdges(continue_node, {NEXT})
+        self.assertEdge(continue_node, NEXT, for_node)
 
     def test_continue_in_except_no_finally(self):
         code = """\
@@ -854,8 +850,8 @@ def f():
         self.assertEdges(raise_node, {RAISE})
 
         continue_node = self.graph.edge(raise_node, RAISE)
-        self.assertEdges(continue_node, {CONTINUE})
-        self.assertEdge(continue_node, CONTINUE, for_node)
+        self.assertEdges(continue_node, {NEXT})
+        self.assertEdge(continue_node, NEXT, for_node)
 
     def test_continue_in_except(self):
         code = """\
@@ -881,9 +877,9 @@ def f():
         self.assertEdges(raise_node, {RAISE})
 
         continue_node = self.graph.edge(raise_node, RAISE)
-        self.assertEdges(continue_node, {CONTINUE})
+        self.assertEdges(continue_node, {NEXT})
 
-        finally_node = self.graph.edge(continue_node, CONTINUE)
+        finally_node = self.graph.edge(continue_node, NEXT)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
         self.assertEdge(finally_node, NEXT, for_node)
@@ -923,9 +919,9 @@ def f():
         self.assertEdge(finally_raise_node, NEXT, context[RAISE])
 
         break_node = self.graph.edge(except_node, MATCH)
-        self.assertEdges(break_node, {BREAK})
+        self.assertEdges(break_node, {NEXT})
 
-        finally_node = self.graph.edge(break_node, BREAK)
+        finally_node = self.graph.edge(break_node, NEXT)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
         self.assertEdge(finally_node, NEXT, context[RETURN])

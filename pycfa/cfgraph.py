@@ -12,7 +12,22 @@ Note that it's possible to have parallel edges, and it's possible to
 have self loops. The set of edge labels for a given node depends only
 on the node type.
 
-Each node can optionally contain a link to an AST node.
+Each node can optionally contain a link to an underlying AST node. (But
+note that distinct CFNodes can link to the same AST node.)
+
+Node types:
+
+- GENERIC nodes have outward labels NEXT and RAISE
+- LOOP nodes have outward labels ENTER, ELSE and RAISE
+- HANDLER nodes have outward labels MATCH, NO_MATCH and RAISE
+- TRY nodes have only an ENTER label. (Should this be next?)
+- SIMPLE nodes have only a NEXT label (e.g., break, continue, pass)
+- IF nodes have IF, ELSE and RAISE labels
+- RAISE nodes have only RAISE labels
+- RETURN nodes have only RETURN labels
+- RETURN_VALUE nodes have RETURN_VALUE and RAISE labels
+
+
 
 """
 
