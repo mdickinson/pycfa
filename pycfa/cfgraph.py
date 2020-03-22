@@ -1,5 +1,19 @@
 """
 Graph structure for the control-flow graph.
+
+Conceptually, our graph is very similar to a DFA graph for a regular
+expression. It consists of:
+
+- a set of nodes
+- for each node, a set of edge labels
+- for each node and edge label, a target node
+
+Note that it's possible to have parallel edges, and it's possible to
+have self loops. The set of edge labels for a given node depends only
+on the node type.
+
+Each node can optionally contain a link to an AST node.
+
 """
 
 import ast
