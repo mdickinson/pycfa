@@ -19,11 +19,8 @@ RETURN = "return"
 RETURN_VALUE = "return_value"
 
 # Constants used only as edge labels.
-IF = "if"
 ELSE = "else"
 ENTER = "enter"
-MATCH = "match"
-NO_MATCH = "no_match"
 
 
 # Type alias for analysis contexts.
@@ -151,8 +148,8 @@ class CFAnalysis:
                 raise_node = self.new_node(
                     {
                         RAISE: context[RAISE],
-                        MATCH: match_node,
-                        NO_MATCH: raise_node,
+                        ENTER: match_node,
+                        ELSE: raise_node,
                     },
                     ast_node=handler.type,
                 )
@@ -162,7 +159,7 @@ class CFAnalysis:
         body_context[NEXT] = self.analyse_statements(statement.orelse, context)
         body_node = self.analyse_statements(statement.body, body_context)
 
-        return self.new_node({ENTER: body_node}, ast_node=statement)
+        return self.new_node({NEXT: body_node}, ast_node=statement)
 
     def _analyse_with(
         self, statement: Union[ast.AsyncWith, ast.With], context: Context
@@ -298,7 +295,7 @@ class CFAnalysis:
         """
         return self.new_node(
             {
-                IF: self.analyse_statements(statement.body, context),
+                ENTER: self.analyse_statements(statement.body, context),
                 ELSE: self.analyse_statements(statement.orelse, context),
                 RAISE: context[RAISE],
             },

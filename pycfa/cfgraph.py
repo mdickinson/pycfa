@@ -15,19 +15,13 @@ on the node type.
 Each node can optionally contain a link to an underlying AST node. (But
 note that distinct CFNodes can link to the same AST node.)
 
-Node types:
+There are four node types:
 
 - GENERIC nodes have outward labels NEXT and RAISE
-- LOOP nodes have outward labels ENTER, ELSE and RAISE
-- HANDLER nodes have outward labels MATCH, NO_MATCH and RAISE
-- TRY nodes have only an ENTER label. (Should this be next?)
-- SIMPLE nodes have only a NEXT label (e.g., break, continue, pass)
-- IF nodes have IF, ELSE and RAISE labels
+- SIMPLE nodes have only a NEXT label (
+    e.g., break, continue, pass, return, try)
 - RAISE nodes have only RAISE labels
-- RETURN nodes have only RETURN labels
-- RETURN_VALUE nodes have RETURN_VALUE and RAISE labels
-
-
+- BRANCH nodes have outward labels ENTER, ELSE and RAISE
 
 """
 
