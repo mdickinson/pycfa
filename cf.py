@@ -39,9 +39,9 @@ class CFNode:
 Context = Dict[str, CFNode]
 
 
-class CFGraph:
+class CFAnalysis:
     """
-    The control-flow graph.
+    The control-flow analysis.
 
     This is a directed graph (not necessarily acyclic) with labelled edges.
     Most nodes will correspond directly to an AST statement.
@@ -506,7 +506,7 @@ class CFGraph:
     @classmethod
     def from_function(
         cls, ast_node: Union[ast.AsyncFunctionDef, ast.FunctionDef]
-    ) -> CFGraph:
+    ) -> CFAnalysis:
         """
         Construct a control flow graph for a function or coroutine AST node.
 
@@ -542,7 +542,7 @@ class CFGraph:
         return self
 
     @classmethod
-    def from_module(cls, ast_node: ast.Module) -> CFGraph:
+    def from_module(cls, ast_node: ast.Module) -> CFAnalysis:
         """
         Construct a control flow graph for an ast.Module node.
         """

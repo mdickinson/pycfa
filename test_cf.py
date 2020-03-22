@@ -7,6 +7,8 @@ Aid in detection of things like unreachable code.
 # TODO: Better context management (more functional).
 # TODO: graphing
 # TODO: separate out graph class
+# TODO: ClassDef nodes
+# TODO: package structure
 
 
 import ast
@@ -14,7 +16,7 @@ import unittest
 
 from cf import (
     BREAK,
-    CFGraph,
+    CFAnalysis,
     CONTINUE,
     ELSE,
     ENTER,
@@ -1101,7 +1103,7 @@ def f(bob):
         (function_node,) = module_node.body
         (inner_function,) = function_node.body
 
-        graph = CFGraph.from_function(inner_function)
+        graph = CFAnalysis.from_function(inner_function)
         context = graph.context
         node = context[ENTER]
         self.assertEqual(node, context[RETURN])
@@ -1163,7 +1165,7 @@ async def beckett():
             function_node, (ast.AsyncFunctionDef, ast.FunctionDef)
         )
 
-        graph = CFGraph.from_function(function_node)
+        graph = CFAnalysis.from_function(function_node)
         context = graph.context
         self.graph = graph
         self.assertEqual(
@@ -1179,7 +1181,7 @@ async def beckett():
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
         self.assertIsInstance(module_node, ast.Module)
 
-        graph = CFGraph.from_module(module_node)
+        graph = CFAnalysis.from_module(module_node)
         context = graph.context
         self.graph = graph
         self.assertEqual(
