@@ -16,7 +16,6 @@ Aid in detection of things like unreachable code.
 # TODO: remove use of self.graph in tests
 
 
-
 import ast
 import unittest
 
