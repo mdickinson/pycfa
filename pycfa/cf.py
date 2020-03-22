@@ -15,6 +15,9 @@ BREAK = "break"
 CONTINUE = "continue"
 RETURN = "return"
 RETURN_VALUE = "return_value"
+NEXTC = "nextc"
+RAISEC = "raisec"
+ENTERC = "enterc"
 
 
 # Type alias for analysis contexts.
@@ -82,7 +85,7 @@ class CFAnalysis:
         These statements are non-executable, so we don't create a node
         for them. Instead, we simply return the NEXT node from the context.
         """
-        return context[NEXT]
+        return context[NEXTC]
 
     def _analyse_generic(
         self, statement: ast.stmt, context: Context
@@ -91,7 +94,7 @@ class CFAnalysis:
         Analyse a generic statement that doesn't affect control flow.
         """
         return self.new_node(
-            {RAISE: context[RAISE], NEXT: context[NEXT]}, ast_node=statement
+            {RAISE: context[RAISEC], NEXT: context[NEXTC]}, ast_node=statement
         )
 
     def _analyse_loop(
@@ -105,14 +108,14 @@ class CFAnalysis:
         dummy_node = self.new_node({})
 
         body_context = context.copy()
-        body_context[BREAK] = context[NEXT]
+        body_context[BREAK] = context[NEXTC]
         body_context[CONTINUE] = dummy_node
-        body_context[NEXT] = dummy_node
+        body_context[NEXTC] = dummy_node
         body_node = self.analyse_statements(statement.body, body_context)
 
         loop_node = self.new_node(
             {
-                RAISE: context[RAISE],
+                RAISE: context[RAISEC],
                 ELSE: self.analyse_statements(statement.orelse, context),
                 ENTER: body_node,
             },
@@ -131,7 +134,7 @@ class CFAnalysis:
         part is ignored, as though it weren't present.
         """
         # Process handlers backwards; raise if the last handler doesn't match.
-        raise_node = context[RAISE]
+        raise_node = context[RAISEC]
         for handler in reversed(statement.handlers):
             match_node = self.analyse_statements(handler.body, context)
             if handler.type is None:
@@ -140,7 +143,7 @@ class CFAnalysis:
             else:
                 raise_node = self.new_node(
                     {
-                        RAISE: context[RAISE],
+                        RAISE: context[RAISEC],
                         ENTER: match_node,
                         ELSE: raise_node,
                     },
@@ -148,8 +151,10 @@ class CFAnalysis:
                 )
 
         body_context = context.copy()
-        body_context[RAISE] = raise_node
-        body_context[NEXT] = self.analyse_statements(statement.orelse, context)
+        body_context[RAISEC] = raise_node
+        body_context[NEXTC] = self.analyse_statements(
+            statement.orelse, context
+        )
         body_node = self.analyse_statements(statement.body, body_context)
 
         return self.new_node({NEXT: body_node}, ast_node=statement)
@@ -163,7 +168,7 @@ class CFAnalysis:
         return self.new_node(
             {
                 ENTER: self.analyse_statements(statement.body, context),
-                RAISE: context[RAISE],
+                RAISE: context[RAISEC],
             },
             ast_node=statement,
         )
@@ -290,7 +295,7 @@ class CFAnalysis:
             {
                 ENTER: self.analyse_statements(statement.body, context),
                 ELSE: self.analyse_statements(statement.orelse, context),
-                RAISE: context[RAISE],
+                RAISE: context[RAISEC],
             },
             ast_node=statement,
         )
@@ -323,13 +328,13 @@ class CFAnalysis:
         """
         Analyse a pass statement.
         """
-        return self.new_node({NEXT: context[NEXT]}, ast_node=statement)
+        return self.new_node({NEXT: context[NEXTC]}, ast_node=statement)
 
     def analyse_Raise(self, statement: ast.Raise, context: Context) -> CFNode:
         """
         Analyse a raise statement.
         """
-        return self.new_node({RAISE: context[RAISE]}, ast_node=statement)
+        return self.new_node({RAISE: context[RAISEC]}, ast_node=statement)
 
     def analyse_Return(
         self, statement: ast.Return, context: Context
@@ -341,7 +346,7 @@ class CFAnalysis:
             return self.new_node({NEXT: context[RETURN]}, ast_node=statement)
         else:
             return self.new_node(
-                {NEXT: context[RETURN_VALUE], RAISE: context[RAISE]},
+                {NEXT: context[RETURN_VALUE], RAISE: context[RAISEC]},
                 ast_node=statement,
             )
 
@@ -396,7 +401,7 @@ class CFAnalysis:
             if self._graph.edges_to(dummy_node):
                 # Dummy node is reachable from the try-except-else.
                 finally_context = context.copy()
-                finally_context[NEXT] = end_node
+                finally_context[NEXTC] = end_node
                 finally_node = self.analyse_statements(
                     statement.finalbody, finally_context
                 )
@@ -425,10 +430,10 @@ class CFAnalysis:
         """
         Analyse a sequence of statements.
         """
-        next = context[NEXT]
+        next = context[NEXTC]
         for statement in reversed(statements):
             statement_context = context.copy()
-            statement_context[NEXT] = next
+            statement_context[NEXTC] = next
 
             method_name = "analyse_" + type(statement).__name__
             analyser = getattr(self, method_name)
@@ -459,16 +464,16 @@ class CFAnalysis:
         raise_node = self.new_node({})
 
         body_context = {
-            NEXT: return_node,
-            RAISE: raise_node,
+            NEXTC: return_node,
+            RAISEC: raise_node,
             RETURN: return_node,
             RETURN_VALUE: return_value_node,
         }
         enter_node = self.analyse_statements(ast_node.body, body_context)
 
         self.context = {
-            ENTER: enter_node,
-            RAISE: raise_node,
+            ENTERC: enter_node,
+            RAISEC: raise_node,
             RETURN: return_node,
             RETURN_VALUE: return_value_node,
         }
@@ -485,14 +490,14 @@ class CFAnalysis:
         raise_node = self.new_node({})
 
         body_context = {
-            NEXT: leave_node,
-            RAISE: raise_node,
+            NEXTC: leave_node,
+            RAISEC: raise_node,
         }
         enter_node = self.analyse_statements(ast_node.body, body_context)
 
         self.context = {
-            ENTER: enter_node,
-            NEXT: leave_node,
-            RAISE: raise_node,
+            ENTERC: enter_node,
+            NEXTC: leave_node,
+            RAISEC: raise_node,
         }
         return self
