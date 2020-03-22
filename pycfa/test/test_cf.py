@@ -88,8 +88,8 @@ def f():
 """
         context, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Return)
-        self.assertEdges(stmt_node, {RETURN})
-        self.assertEdge(stmt_node, RETURN, context[RETURN])
+        self.assertEdges(stmt_node, {NEXT})
+        self.assertEdge(stmt_node, NEXT, context[RETURN])
 
     def test_return_with_value(self):
         code = """\
@@ -98,9 +98,9 @@ def f():
 """
         context, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Return)
-        self.assertEdges(stmt_node, {RAISE, RETURN_VALUE})
+        self.assertEdges(stmt_node, {NEXT, RAISE})
         self.assertEdge(stmt_node, RAISE, context[RAISE])
-        self.assertEdge(stmt_node, RETURN_VALUE, context[RETURN_VALUE])
+        self.assertEdge(stmt_node, NEXT, context[RETURN_VALUE])
 
     def test_raise(self):
         code = """\
@@ -208,14 +208,14 @@ def f():
 
         if_branch = self.graph.edge(if_node, IF)
         self.assertNodetype(if_branch, ast.Return)
-        self.assertEdges(if_branch, {RAISE, RETURN_VALUE})
-        self.assertEdge(if_branch, RETURN_VALUE, context[RETURN_VALUE])
+        self.assertEdges(if_branch, {NEXT, RAISE})
+        self.assertEdge(if_branch, NEXT, context[RETURN_VALUE])
         self.assertEdge(if_branch, RAISE, context[RAISE])
 
         else_node = self.graph.edge(if_node, ELSE)
         self.assertNodetype(else_node, ast.Return)
-        self.assertEdges(else_node, {RAISE, RETURN_VALUE})
-        self.assertEdge(else_node, RETURN_VALUE, context[RETURN_VALUE])
+        self.assertEdges(else_node, {NEXT, RAISE})
+        self.assertEdge(else_node, NEXT, context[RETURN_VALUE])
         self.assertEdge(else_node, RAISE, context[RAISE])
 
     def test_plain_return_in_if_and_else(self):
@@ -233,13 +233,13 @@ def f():
 
         if_branch = self.graph.edge(if_node, IF)
         self.assertNodetype(if_branch, ast.Return)
-        self.assertEdges(if_branch, {RETURN})
-        self.assertEdge(if_branch, RETURN, context[RETURN])
+        self.assertEdges(if_branch, {NEXT})
+        self.assertEdge(if_branch, NEXT, context[RETURN])
 
         else_node = self.graph.edge(if_node, ELSE)
         self.assertNodetype(else_node, ast.Return)
-        self.assertEdges(else_node, {RETURN})
-        self.assertEdge(else_node, RETURN, context[RETURN])
+        self.assertEdges(else_node, {NEXT})
+        self.assertEdge(else_node, NEXT, context[RETURN])
 
     def test_unreachable_statements(self):
         code = """\
@@ -255,8 +255,8 @@ def f():
 
         stmt2_node = self.graph.edge(stmt1_node, NEXT)
         self.assertNodetype(stmt2_node, ast.Return)
-        self.assertEdges(stmt2_node, {RETURN})
-        self.assertEdge(stmt2_node, RETURN, context[RETURN])
+        self.assertEdges(stmt2_node, {NEXT})
+        self.assertEdge(stmt2_node, NEXT, context[RETURN])
 
     def test_while(self):
         code = """\
@@ -626,9 +626,9 @@ def f():
 
         try_node = self.graph.edge(start_node, ENTER)
         self.assertNodetype(try_node, ast.Return)
-        self.assertEdges(try_node, {RETURN})
+        self.assertEdges(try_node, {NEXT})
 
-        finally_node = self.graph.edge(try_node, RETURN)
+        finally_node = self.graph.edge(try_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
@@ -648,9 +648,9 @@ def f():
 
         try_node = self.graph.edge(start_node, ENTER)
         self.assertNodetype(try_node, ast.Return)
-        self.assertEdges(try_node, {RAISE, RETURN_VALUE})
+        self.assertEdges(try_node, {NEXT, RAISE})
 
-        finally_node = self.graph.edge(try_node, RETURN_VALUE)
+        finally_node = self.graph.edge(try_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
@@ -734,8 +734,8 @@ def f():
         self.assertEdges(raise_node, {RAISE})
 
         return_node = self.graph.edge(raise_node, RAISE)
-        self.assertEdges(return_node, {RAISE, RETURN_VALUE})
-        self.assertEdge(return_node, RETURN_VALUE, context[RETURN_VALUE])
+        self.assertEdges(return_node, {NEXT, RAISE})
+        self.assertEdge(return_node, NEXT, context[RETURN_VALUE])
         self.assertEdge(return_node, RAISE, context[RAISE])
 
     def test_return_in_finally(self):
@@ -753,8 +753,8 @@ def f():
         self.assertEdges(raise_node, {RAISE})
 
         return_node = self.graph.edge(raise_node, RAISE)
-        self.assertEdges(return_node, {RETURN})
-        self.assertEdge(return_node, RETURN, context[RETURN])
+        self.assertEdges(return_node, {NEXT})
+        self.assertEdge(return_node, NEXT, context[RETURN])
 
     def test_raise_in_finally(self):
         code = """\
@@ -796,9 +796,9 @@ def f():
         self.assertEdges(try_node, {ENTER})
 
         return_node = self.graph.edge(try_node, ENTER)
-        self.assertEdges(return_node, {RETURN})
+        self.assertEdges(return_node, {NEXT})
 
-        break_node = self.graph.edge(return_node, RETURN)
+        break_node = self.graph.edge(return_node, NEXT)
         self.assertEdges(break_node, {NEXT})
         self.assertEdge(break_node, NEXT, context[RETURN])
 
@@ -961,9 +961,9 @@ def f():
         self.assertEdge(finally1_node, NEXT, for_node)
 
         else_node = self.graph.edge(do_node, NEXT)
-        self.assertEdges(else_node, {RETURN})
+        self.assertEdges(else_node, {NEXT})
 
-        finally_node = self.graph.edge(else_node, RETURN)
+        finally_node = self.graph.edge(else_node, NEXT)
         self.assertEdges(finally_node, {NEXT, RAISE})
         self.assertEdge(finally_node, RAISE, context[RAISE])
         self.assertEdge(finally_node, NEXT, context[RETURN])
@@ -991,7 +991,7 @@ def f():
         ok_node = self.graph.edge(do_node, NEXT)
 
         raised_next = self.graph.edge(raised_node, NEXT)
-        ok_next = self.graph.edge(ok_node, RETURN)
+        ok_next = self.graph.edge(ok_node, NEXT)
 
         self.assertEqual(raised_next, ok_next)
 

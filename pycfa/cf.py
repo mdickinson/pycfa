@@ -348,10 +348,10 @@ class CFAnalysis:
         Analyse a return statement.
         """
         if statement.value is None:
-            return self.new_node({RETURN: context[RETURN]}, ast_node=statement)
+            return self.new_node({NEXT: context[RETURN]}, ast_node=statement)
         else:
             return self.new_node(
-                {RAISE: context[RAISE], RETURN_VALUE: context[RETURN_VALUE]},
+                {NEXT: context[RETURN_VALUE], RAISE: context[RAISE]},
                 ast_node=statement,
             )
 
