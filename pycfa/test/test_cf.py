@@ -8,9 +8,9 @@ Aid in detection of things like unreachable code.
 
 # TODO: Better context management (more functional).
 # TODO: graphing
-# TODO: ClassDef nodes
 # TODO: package structure
 # TODO: remove use of self.graph in tests
+# TODO: setup.py
 
 
 import ast
@@ -979,7 +979,7 @@ def f():
     finally:
         do_cleanup()
 """
-        context, try_node = self._function_context(code)
+        _, try_node = self._function_context(code)
 
         # The 'return' in the else branch should lead to the same place
         # as the handle_exception() success in the except branch.
@@ -1083,6 +1083,18 @@ async def f():
         self.assertEdges(pass_node, {NEXT})
         self.assertEdge(pass_node, NEXT, context[RETURN])
 
+    def test_classdef(self):
+        code = """\
+class SomeClass:
+    def some_method(self, arg1, arg2):
+        return bob
+"""
+        context, initial = self._class_context(code)
+        self.assertNodetype(initial, ast.FunctionDef)
+        self.assertEdges(initial, {NEXT, RAISE})
+        self.assertEdge(initial, NEXT, context[NEXTC])
+        self.assertEdge(initial, RAISE, context[RAISEC])
+
     def test_global(self):
         code = """\
 def f():
@@ -1180,6 +1192,23 @@ async def beckett():
         self.assertIsInstance(module_node, ast.Module)
 
         graph = CFAnalysis.from_module(module_node)
+        context = graph.context
+        self.graph = graph
+        self.assertEqual(
+            sorted(context.keys()), [ENTERC, NEXTC, RAISEC],
+        )
+        self.assertEdges(context[RAISEC], set())
+        self.assertEdges(context[NEXTC], set())
+
+        return context, context[ENTERC]
+
+    def _class_context(self, code):
+        (module_node,) = compile(
+            code, "test_cf", "exec", ast.PyCF_ONLY_AST
+        ).body
+        self.assertIsInstance(module_node, ast.ClassDef)
+
+        graph = CFAnalysis.from_class(module_node)
         context = graph.context
         self.graph = graph
         self.assertEqual(

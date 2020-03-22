@@ -442,6 +442,29 @@ class CFAnalysis:
         return next
 
     @classmethod
+    def from_class(cls, ast_node: ast.ClassDef) -> CFAnalysis:
+        """
+        Construct a control flow graph for an ast.Module node.
+        """
+        self = cls()
+
+        leave_node = self.new_node({})
+        raise_node = self.new_node({})
+
+        body_context = {
+            NEXTC: leave_node,
+            RAISEC: raise_node,
+        }
+        enter_node = self.analyse_statements(ast_node.body, body_context)
+
+        self.context = {
+            ENTERC: enter_node,
+            NEXTC: leave_node,
+            RAISEC: raise_node,
+        }
+        return self
+
+    @classmethod
     def from_function(
         cls, ast_node: Union[ast.AsyncFunctionDef, ast.FunctionDef]
     ) -> CFAnalysis:
