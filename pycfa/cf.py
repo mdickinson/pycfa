@@ -8,7 +8,7 @@ from __future__ import annotations
 import ast
 from typing import Dict, List, Optional, Set, Union
 
-from pycfa.cfgraph import CFGraph, CFNode, ELSE, ENTER, NEXT, RAISE
+from pycfa.cfgraph import CFGraph, CFNode
 
 # Context labels
 BREAK = "break"
@@ -18,6 +18,20 @@ RETURN_VALUE = "return_value"
 NEXTC = "nextc"
 RAISEC = "raisec"
 ENTERC = "enterc"
+
+# Edge labels
+
+#: Link to the next statement (if no errors occurred)
+NEXT = "next"
+
+#: Link followed if an error is raised.
+RAISE = "raise"
+
+#: Link followed to enter an if / for / while / except block
+ENTER = "enter"
+
+#: Link followed when a condition does not apply
+ELSE = "else"
 
 
 # Type alias for analysis contexts.

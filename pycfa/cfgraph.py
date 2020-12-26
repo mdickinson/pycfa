@@ -29,21 +29,6 @@ import ast
 from typing import Dict, Optional, Set, Tuple
 
 
-# Edge labels
-
-#: Link to the next statement (if no errors occurred)
-NEXT = "next"
-
-#: Link followed if an error is raised.
-RAISE = "raise"
-
-#: Link followed to enter an if / for / while / except block
-ENTER = "enter"
-
-#: Link followed when a condition does not apply
-ELSE = "else"
-
-
 class CFNode:
     """
     A node on the control flow graph.
