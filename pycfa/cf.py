@@ -71,7 +71,10 @@ class CFAnalysis:
         return self._graph.edge_labels(source)
 
     def new_node(
-        self, edges: Dict[str, CFNode], ast_node: Optional[ast.AST] = None
+        self,
+        edges: Dict[str, CFNode],
+        ast_node: Optional[ast.AST] = None,
+        annotation: Optional[str] = None,
     ) -> CFNode:
         """
         Create a new control-flow node and add it to the graph.
@@ -82,13 +85,16 @@ class CFAnalysis:
             Mapping from edge labels to target nodes.
         ast_node : ast.AST, optional
             Linked ast node.
+        annotation : str, optional
+            Text annotation for the node; used for nodes that aren't
+            linked to an AST node.
 
         Returns
         -------
         node : CFNode
             The newly-created node.
         """
-        return self._graph.new_node(edges, ast_node=ast_node)
+        return self._graph.new_node(edges, ast_node=ast_node, annotation=annotation)
 
     def _analyse_declaration(
         self, statement: Union[ast.Global, ast.Nonlocal], context: Context
@@ -117,7 +123,7 @@ class CFAnalysis:
         """
         Analyse a loop statement (for or while).
         """
-        dummy_node = self.new_node({})
+        dummy_node = self.new_node({}, annotation="<dummy>")
 
         body_context = context.copy()
         body_context[BREAK] = context[NEXTC]
@@ -358,7 +364,10 @@ class CFAnalysis:
 
         # For each actual node in the context (excluding duplicates),
         # create a corresponding dummy node.
-        dummy_nodes = {node: self.new_node({}) for node in set(context.values())}
+        dummy_nodes = {
+            node: self.new_node({}, annotation="<dummy>")
+            for node in set(context.values())
+        }
 
         # Analyse the try-except-else part of the statement using those dummy
         # nodes.
@@ -424,8 +433,8 @@ class CFAnalysis:
         """
         self = cls()
 
-        leave_node = self.new_node({})
-        raise_node = self.new_node({})
+        leave_node = self.new_node({}, annotation="<leave>")
+        raise_node = self.new_node({}, annotation="<raise>")
 
         body_context = {
             NEXTC: leave_node,
@@ -455,12 +464,12 @@ class CFAnalysis:
         self = cls()
 
         # Node for returns without an explicit return value.
-        return_node = self.new_node({})
+        return_node = self.new_node({}, annotation="<return-without-value>")
         # Node for returns *with* an explicit return value (which could
         # be None).
-        return_value_node = self.new_node({})
+        return_value_node = self.new_node({}, annotation="<return-with-value>")
         # Node for exit via raise.
-        raise_node = self.new_node({})
+        raise_node = self.new_node({}, annotation="<raise>")
 
         body_context = {
             NEXTC: return_node,
@@ -485,8 +494,8 @@ class CFAnalysis:
         """
         self = cls()
 
-        leave_node = self.new_node({})
-        raise_node = self.new_node({})
+        leave_node = self.new_node({}, annotation="<leave>")
+        raise_node = self.new_node({}, annotation="<raise>")
 
         body_context = {
             NEXTC: leave_node,

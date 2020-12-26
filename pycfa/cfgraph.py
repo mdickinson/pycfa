@@ -32,12 +32,26 @@ from typing import Dict, Optional, Set, Tuple
 class CFNode:
     """
     A node on the control flow graph.
+
+    Parameters
+    ----------
+    ast_node : ast.AST, optional
+        Linked AST node
+    annotation : str, optional
+        Text annotation
     """
 
     ast_node: Optional[ast.AST]
 
-    def __init__(self, ast_node: Optional[ast.AST] = None) -> None:
+    annotation: Optional[str]
+
+    def __init__(
+        self,
+        ast_node: Optional[ast.AST] = None,
+        annotation: Optional[str] = None,
+    ) -> None:
         self.ast_node = ast_node
+        self.annotation = annotation
 
 
 class CFGraph:
@@ -57,7 +71,10 @@ class CFGraph:
     # Functions that change the state of the graph.
 
     def new_node(
-        self, edges: Dict[str, CFNode], ast_node: Optional[ast.AST] = None
+        self,
+        edges: Dict[str, CFNode],
+        ast_node: Optional[ast.AST] = None,
+        annotation: Optional[str] = None,
     ) -> CFNode:
         """
         Create a new control-flow node and add it to the graph.
@@ -68,13 +85,15 @@ class CFGraph:
             Mapping from edge labels to target nodes.
         ast_node : ast.AST, optional
             Linked ast node.
+        annotation : str, optional
+            Text annotation for nodes that don't have a linked AST node.
 
         Returns
         -------
         node : CFNode
             The newly-created node.
         """
-        node = CFNode(ast_node=ast_node)
+        node = CFNode(ast_node=ast_node, annotation=annotation)
         self._add_node(node)
         for name, target in edges.items():
             self._add_edge(node, name, target)
