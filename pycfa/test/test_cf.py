@@ -1167,12 +1167,8 @@ async def beckett():
     # Helper methods
 
     def _function_context(self, code):
-        (function_node,) = compile(
-            code, "test_cf", "exec", ast.PyCF_ONLY_AST
-        ).body
-        self.assertIsInstance(
-            function_node, (ast.AsyncFunctionDef, ast.FunctionDef)
-        )
+        (function_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
+        self.assertIsInstance(function_node, (ast.AsyncFunctionDef, ast.FunctionDef))
 
         graph = CFAnalysis.from_function(function_node)
         context = graph.context
@@ -1204,9 +1200,7 @@ async def beckett():
         return context, context[ENTERC]
 
     def _class_context(self, code):
-        (module_node,) = compile(
-            code, "test_cf", "exec", ast.PyCF_ONLY_AST
-        ).body
+        (module_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
         self.assertIsInstance(module_node, ast.ClassDef)
 
         graph = CFAnalysis.from_class(module_node)
