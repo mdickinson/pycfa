@@ -1178,7 +1178,8 @@ async def beckett():
         context = graph.context
         self.graph = graph
         self.assertEqual(
-            sorted(context.keys()), [ENTERC, RAISEC, RETURN, RETURN_VALUE],
+            sorted(context.keys()),
+            [ENTERC, RAISEC, RETURN, RETURN_VALUE],
         )
         self.assertEdges(context[RAISEC], set())
         self.assertEdges(context[RETURN], set())
@@ -1194,7 +1195,8 @@ async def beckett():
         context = graph.context
         self.graph = graph
         self.assertEqual(
-            sorted(context.keys()), [ENTERC, NEXTC, RAISEC],
+            sorted(context.keys()),
+            [ENTERC, NEXTC, RAISEC],
         )
         self.assertEdges(context[RAISEC], set())
         self.assertEdges(context[NEXTC], set())
@@ -1211,7 +1213,8 @@ async def beckett():
         context = graph.context
         self.graph = graph
         self.assertEqual(
-            sorted(context.keys()), [ENTERC, NEXTC, RAISEC],
+            sorted(context.keys()),
+            [ENTERC, NEXTC, RAISEC],
         )
         self.assertEdges(context[RAISEC], set())
         self.assertEdges(context[NEXTC], set())
