@@ -26,7 +26,7 @@ setuptools.setup(
     description="Analyse control flow in a Python function, class or module",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/mdickinson/simplefractions",
+    url="https://github.com/mdickinson/pycfa",
     packages=setuptools.find_packages(),
     classifiers=[
         "License :: OSI Approved :: Apache Software License",
