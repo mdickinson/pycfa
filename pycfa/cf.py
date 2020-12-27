@@ -57,8 +57,10 @@ class CFAnalysis:
     Most nodes will correspond directly to an AST statement.
     """
 
+    #: The control-flow graph.
     _graph: CFGraph[CFNode]
 
+    #: Mapping from labels to particular nodes in the graph.
     context: Context
 
     def __init__(self) -> None:
@@ -83,7 +85,8 @@ class CFAnalysis:
 
     def new_node(
         self,
-        edges: Dict[str, CFNode],
+        *,
+        edges: Optional[Dict[str, CFNode]] = None,
         ast_node: Optional[ast.AST] = None,
         annotation: Optional[str] = None,
     ) -> CFNode:
@@ -105,6 +108,9 @@ class CFAnalysis:
         node : CFNode
             The newly-created node.
         """
+        if edges is None:
+            edges = {}
+
         node = CFNode(ast_node=ast_node, annotation=annotation)
         self._graph.add_node(node, edges=edges)
         return node
@@ -125,7 +131,7 @@ class CFAnalysis:
         Analyse a generic statement that doesn't affect control flow.
         """
         return self.new_node(
-            {RAISE: context[RAISEC], NEXT: context[NEXTC]}, ast_node=statement
+            edges={RAISE: context[RAISEC], NEXT: context[NEXTC]}, ast_node=statement
         )
 
     def _analyse_loop(
@@ -136,7 +142,7 @@ class CFAnalysis:
         """
         Analyse a loop statement (for or while).
         """
-        dummy_node = self.new_node({}, annotation="<dummy>")
+        dummy_node = self.new_node(annotation="<dummy>")
 
         body_context = context.copy()
         body_context[BREAK] = context[NEXTC]
@@ -145,7 +151,7 @@ class CFAnalysis:
         body_node = self.analyse_statements(statement.body, body_context)
 
         loop_node = self.new_node(
-            {
+            edges={
                 RAISE: context[RAISEC],
                 ELSE: self.analyse_statements(statement.orelse, context),
                 ENTER: body_node,
@@ -171,7 +177,7 @@ class CFAnalysis:
                 raise_node = match_node
             else:
                 raise_node = self.new_node(
-                    {
+                    edges={
                         RAISE: context[RAISEC],
                         ENTER: match_node,
                         ELSE: raise_node,
@@ -184,7 +190,7 @@ class CFAnalysis:
         body_context[NEXTC] = self.analyse_statements(statement.orelse, context)
         body_node = self.analyse_statements(statement.body, body_context)
 
-        return self.new_node({NEXT: body_node}, ast_node=statement)
+        return self.new_node(edges={NEXT: body_node}, ast_node=statement)
 
     def _analyse_with(
         self, statement: Union[ast.AsyncWith, ast.With], context: Context
@@ -193,7 +199,7 @@ class CFAnalysis:
         Analyse a with or async with statement.
         """
         return self.new_node(
-            {
+            edges={
                 ENTER: self.analyse_statements(statement.body, context),
                 RAISE: context[RAISEC],
             },
@@ -248,7 +254,7 @@ class CFAnalysis:
         """
         Analyse a break statement.
         """
-        return self.new_node({NEXT: context[BREAK]}, ast_node=statement)
+        return self.new_node(edges={NEXT: context[BREAK]}, ast_node=statement)
 
     def analyse_ClassDef(self, statement: ast.ClassDef, context: Context) -> CFNode:
         """
@@ -260,7 +266,7 @@ class CFAnalysis:
         """
         Analyse a continue statement.
         """
-        return self.new_node({NEXT: context[CONTINUE]}, ast_node=statement)
+        return self.new_node(edges={NEXT: context[CONTINUE]}, ast_node=statement)
 
     def analyse_Delete(self, statement: ast.Delete, context: Context) -> CFNode:
         """
@@ -299,7 +305,7 @@ class CFAnalysis:
         Analyse an if statement.
         """
         return self.new_node(
-            {
+            edges={
                 ENTER: self.analyse_statements(statement.body, context),
                 ELSE: self.analyse_statements(statement.orelse, context),
                 RAISE: context[RAISEC],
@@ -329,23 +335,23 @@ class CFAnalysis:
         """
         Analyse a pass statement.
         """
-        return self.new_node({NEXT: context[NEXTC]}, ast_node=statement)
+        return self.new_node(edges={NEXT: context[NEXTC]}, ast_node=statement)
 
     def analyse_Raise(self, statement: ast.Raise, context: Context) -> CFNode:
         """
         Analyse a raise statement.
         """
-        return self.new_node({RAISE: context[RAISEC]}, ast_node=statement)
+        return self.new_node(edges={RAISE: context[RAISEC]}, ast_node=statement)
 
     def analyse_Return(self, statement: ast.Return, context: Context) -> CFNode:
         """
         Analyse a return statement.
         """
         if statement.value is None:
-            return self.new_node({NEXT: context[RETURN]}, ast_node=statement)
+            return self.new_node(edges={NEXT: context[RETURN]}, ast_node=statement)
         else:
             return self.new_node(
-                {NEXT: context[RETURN_VALUE], RAISE: context[RAISEC]},
+                edges={NEXT: context[RETURN_VALUE], RAISE: context[RAISEC]},
                 ast_node=statement,
             )
 
@@ -378,8 +384,7 @@ class CFAnalysis:
         # For each actual node in the context (excluding duplicates),
         # create a corresponding dummy node.
         dummy_nodes = {
-            node: self.new_node({}, annotation="<dummy>")
-            for node in set(context.values())
+            node: self.new_node(annotation="<dummy>") for node in set(context.values())
         }
 
         # Analyse the try-except-else part of the statement using those dummy
@@ -446,8 +451,8 @@ class CFAnalysis:
         """
         self = cls()
 
-        leave_node = self.new_node({}, annotation="<leave>")
-        raise_node = self.new_node({}, annotation="<raise>")
+        leave_node = self.new_node(annotation="<leave>")
+        raise_node = self.new_node(annotation="<raise>")
 
         body_context = {
             NEXTC: leave_node,
@@ -477,12 +482,12 @@ class CFAnalysis:
         self = cls()
 
         # Node for returns without an explicit return value.
-        return_node = self.new_node({}, annotation="<return-without-value>")
+        return_node = self.new_node(annotation="<return-without-value>")
         # Node for returns *with* an explicit return value (which could
         # be None).
-        return_value_node = self.new_node({}, annotation="<return-with-value>")
+        return_value_node = self.new_node(annotation="<return-with-value>")
         # Node for exit via raise.
-        raise_node = self.new_node({}, annotation="<raise>")
+        raise_node = self.new_node(annotation="<raise>")
 
         body_context = {
             NEXTC: return_node,
@@ -507,8 +512,8 @@ class CFAnalysis:
         """
         self = cls()
 
-        leave_node = self.new_node({}, annotation="<leave>")
-        raise_node = self.new_node({}, annotation="<raise>")
+        leave_node = self.new_node(annotation="<leave>")
+        raise_node = self.new_node(annotation="<raise>")
 
         body_context = {
             NEXTC: leave_node,

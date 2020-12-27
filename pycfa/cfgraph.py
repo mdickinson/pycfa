@@ -97,8 +97,7 @@ class CFGraph(Generic[NodeType]):
         Raises
         ------
         ValueError
-            If the node is not in the graph, or if the node has incoming or
-            outgoing edges.
+            If the node is not in the graph, or if the node is not isolated.
         """
         if node not in self._nodes:
             raise ValueError(f"node {node} not present in the graph")
@@ -171,7 +170,7 @@ class CFGraph(Generic[NodeType]):
         """
         return self._backedges[target]
 
-    # Support for membership testibng
+    # Support for membership testing
 
     def __contains__(self, node: NodeType) -> bool:
         """
@@ -187,19 +186,15 @@ class CFGraph(Generic[NodeType]):
         already in the graph.
         """
         assert node not in self._nodes
-
         self._nodes.add(node)
+
         self._edges[node] = {}
         self._backedges[node] = set()
 
     def _add_edge(self, source: NodeType, label: str, target: NodeType) -> None:
         """
-        Add a labelled edge to the graph. Raises if an edge from the given
-        source, with the given label, already exists.
+        Add a labelled edge to the graph.
         """
-        assert source in self._nodes
-
-        assert target in self._nodes
         assert label not in self._edges[source]
         self._edges[source][label] = target
 

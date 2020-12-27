@@ -15,9 +15,9 @@ class CFNode:
 
     Parameters
     ----------
-    ast_node : ast.AST, optional
+    ast_node
         Linked AST node
-    annotation : str, optional
+    annotation
         Text annotation
     """
 
