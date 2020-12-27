@@ -1,5 +1,6 @@
 """
-Graph structure for the control-flow graph.
+The CFGraph class provides graph structure for the control-flow graph.
+The CFnode class provides the nodes of that graph.
 
 Conceptually, our graph is very similar to a DFA graph for a regular
 expression. It consists of:
@@ -8,21 +9,10 @@ expression. It consists of:
 - for each node, a set of edge labels
 - for each node and edge label, a target node
 
-Note that it's possible to have parallel edges, and it's possible to
-have self loops. The set of edge labels for a given node depends only
-on the node type.
+Parallel edges (with different labels) and self-loops are permitted.
 
-Each node can optionally contain a link to an underlying AST node. (But
-note that distinct CFNodes can link to the same AST node.)
-
-There are four possible labels, and four node types:
-
-- GENERIC nodes have outward labels NEXT and RAISE
-- SIMPLE nodes have only a NEXT label (
-    e.g., break, continue, pass, return, try)
-- RAISE nodes have only RAISE labels
-- BRANCH nodes have outward labels ENTER, ELSE and RAISE
-
+Each node can optionally contain a link to an underlying AST node, and
+can optionally provide a text annotation.
 """
 
 import ast

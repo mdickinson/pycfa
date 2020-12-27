@@ -27,13 +27,13 @@ graph = analysis._graph
 G = pgv.AGraph(strict=False, directed=True)
 
 for node in graph._nodes:
+    kwds = dict(shape="box")
     if node.ast_node is not None:
-        print(node.ast_node)
-        print()
-        label = lines[node.ast_node.lineno - 1].strip()
-        G.add_node(id(node), label=label, shape="box")
-    else:
-        G.add_node(id(node), shape="box")
+        lineno = node.ast_node.lineno
+        kwds.update(label=f"{lineno}: {lines[node.ast_node.lineno - 1].strip()}")
+    elif node.annotation is not None:
+        kwds.update(label=node.annotation)
+    G.add_node(id(node), **kwds)
 
 for source, out_edges in graph._edges.items():
     for label, target in out_edges.items():
@@ -45,11 +45,6 @@ for source, out_edges in graph._edges.items():
         G.add_edge(id(source), id(target), label=label, **kwds)
 
 
-# G.add_node("a", label="Alice")
-# G.add_node("b", label="Bob")
-# G.add_node("c", label="Charlie")
-# G.add_edge("a", "b", "IF")
-# G.add_edge("a", "c", "ELSE")
 print(G.string())
 G.layout(prog="dot")
-G.draw("output.png")
+G.draw("output.svg")

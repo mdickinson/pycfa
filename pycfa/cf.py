@@ -21,6 +21,16 @@ ENTERC = "enterc"
 
 # Edge labels
 
+# There are four possible labels, and four node types. The set of edge labels
+# for a given node depends only on the node type.
+#
+# - GENERIC nodes have outward labels NEXT and RAISE. Most non-control-flow
+#   statements correspond to generic nodes.
+# - SIMPLE nodes have only a NEXT label (e.g., break, continue, pass, return, try)
+# - RAISE nodes have only RAISE labels
+# - BRANCH nodes have outward labels ENTER, ELSE and RAISE. These are used in
+#   if, for, while and try/except statements.
+
 #: Link to the next statement (if no errors occurred)
 NEXT = "next"
 
