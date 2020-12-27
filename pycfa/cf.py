@@ -104,7 +104,9 @@ class CFAnalysis:
         node : CFNode
             The newly-created node.
         """
-        return self._graph.new_node(edges, ast_node=ast_node, annotation=annotation)
+        node = CFNode(ast_node=ast_node, annotation=annotation)
+        self._graph.add_node(node, edges)
+        return node
 
     def _analyse_declaration(
         self, statement: Union[ast.Global, ast.Nonlocal], context: Context

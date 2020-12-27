@@ -6,10 +6,11 @@ Conceptually, our graph is very similar to a DFA graph for a regular
 expression. It consists of:
 
 - a set of nodes
-- for each node, a set of edge labels
+- for each node, a set of edge labels (strings)
 - for each node and edge label, a target node
 
 Parallel edges (with different labels) and self-loops are permitted.
+Nodes can be any hashable object.
 
 Each node can optionally contain a link to an underlying AST node, and
 can optionally provide a text annotation.
@@ -44,14 +45,18 @@ class CFNode:
         self.annotation = annotation
 
 
+#: Type of nodes. For now, require only that nodes are hashable.
+NodeType = CFNode
+
+
 class CFGraph:
     """
     The directed graph underlying the control flow graph.
     """
 
-    _nodes: Set[CFNode]
-    _edges: Dict[CFNode, Dict[str, CFNode]]
-    _backedges: Dict[CFNode, Set[Tuple[CFNode, str]]]
+    _nodes: Set[NodeType]
+    _edges: Dict[NodeType, Dict[str, NodeType]]
+    _backedges: Dict[NodeType, Set[Tuple[NodeType, str]]]
 
     def __init__(self) -> None:
         self._nodes = set()
@@ -60,34 +65,37 @@ class CFGraph:
 
     # Functions that change the state of the graph.
 
-    def new_node(
+    def add_node(
         self,
+        node: CFNode,
         edges: Dict[str, CFNode],
-        ast_node: Optional[ast.AST] = None,
-        annotation: Optional[str] = None,
-    ) -> CFNode:
+    ):
         """
         Create a new control-flow node and add it to the graph.
 
         Parameters
         ----------
+        node : CFNode
+            The node to be added to the graph.
         edges : dict
             Mapping from edge labels to target nodes.
         ast_node : ast.AST, optional
             Linked ast node.
         annotation : str, optional
             Text annotation for nodes that don't have a linked AST node.
-
-        Returns
-        -------
-        node : CFNode
-            The newly-created node.
         """
-        node = CFNode(ast_node=ast_node, annotation=annotation)
         self._add_node(node)
         for name, target in edges.items():
             self._add_edge(node, name, target)
-        return node
+
+    def remove_node(self, node: CFNode) -> None:
+        """
+        Remove a node from the graph. Fails if there are edges to or
+        from that node.
+        """
+        assert not self._backedges[node]
+        assert not self._edges[node]
+        self._nodes.remove(node)
 
     def collapse_node(self, dummy: CFNode, target: CFNode) -> None:
         """
@@ -105,15 +113,6 @@ class CFGraph:
             self._add_edge(source, label, target)
 
         self.remove_node(dummy)
-
-    def remove_node(self, node: CFNode) -> None:
-        """
-        Remove a node from the graph. Fails if there are edges to or
-        from that node.
-        """
-        assert not self._backedges[node]
-        assert not self._edges[node]
-        self._nodes.remove(node)
 
     # Functions for examining or traversing the graph.
 
