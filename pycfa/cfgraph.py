@@ -1,6 +1,5 @@
 """
-The CFGraph class provides graph structure for the control-flow graph.
-The CFnode class provides the nodes of that graph.
+The CFGraph class provides the graph structure for the control-flow graph.
 
 Conceptually, our graph is very similar to a DFA graph for a regular
 expression. It consists of:
@@ -9,40 +8,17 @@ expression. It consists of:
 - for each node, a set of edge labels (strings)
 - for each node and edge label, a target node
 
+The set of operations that can mutate the graph is very limited:
+
+- a new node can be added, together with edges to existing nodes
+- an isolated node can be removed
+- a node with no outgoing edges can be identified with another node
+
 Parallel edges (with different labels) and self-loops are permitted.
 Nodes can be any hashable object.
-
-Each node can optionally contain a link to an underlying AST node, and
-can optionally provide a text annotation.
 """
 
-import ast
 from typing import Dict, Generic, Mapping, Optional, Set, Tuple, TypeVar
-
-
-class CFNode:
-    """
-    A node on the control flow graph.
-
-    Parameters
-    ----------
-    ast_node : ast.AST, optional
-        Linked AST node
-    annotation : str, optional
-        Text annotation
-    """
-
-    ast_node: Optional[ast.AST]
-
-    annotation: Optional[str]
-
-    def __init__(
-        self,
-        ast_node: Optional[ast.AST] = None,
-        annotation: Optional[str] = None,
-    ) -> None:
-        self.ast_node = ast_node
-        self.annotation = annotation
 
 
 #: Type of nodes. For now, require only that nodes are hashable.

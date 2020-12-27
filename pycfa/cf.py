@@ -8,7 +8,8 @@ from __future__ import annotations
 import ast
 from typing import Dict, List, Optional, Set, Union
 
-from pycfa.cfgraph import CFGraph, CFNode
+from pycfa.cfgraph import CFGraph
+from pycfa.cfnode import CFNode
 
 # Context labels
 BREAK = "break"
@@ -56,7 +57,7 @@ class CFAnalysis:
     Most nodes will correspond directly to an AST statement.
     """
 
-    _graph: CFGraph
+    _graph: CFGraph[CFNode]
 
     context: Context
 
