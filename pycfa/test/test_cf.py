@@ -9,7 +9,7 @@ Aid in detection of things like unreachable code.
 # TODO: Better context management (more functional).
 # TODO: graphing
 # TODO: remove use of self.graph in tests
-# TODO: setup.py
+# TODO: license headers
 
 
 import ast

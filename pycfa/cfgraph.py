@@ -17,7 +17,7 @@ can optionally provide a text annotation.
 """
 
 import ast
-from typing import Dict, Optional, Set, Tuple
+from typing import Dict, Generic, Mapping, Optional, Set, Tuple, TypeVar
 
 
 class CFNode:
@@ -46,16 +46,21 @@ class CFNode:
 
 
 #: Type of nodes. For now, require only that nodes are hashable.
-NodeType = CFNode
+NodeType = TypeVar("NodeType")
 
 
-class CFGraph:
+class CFGraph(Generic[NodeType]):
     """
     The directed graph underlying the control flow graph.
     """
 
+    #: The collection of nodes.
     _nodes: Set[NodeType]
+
+    #: Mapping from source node and edge label to target node.
     _edges: Dict[NodeType, Dict[str, NodeType]]
+
+    #: Mapping from target node to collection of (source node, edge) pairs.
     _backedges: Dict[NodeType, Set[Tuple[NodeType, str]]]
 
     def __init__(self) -> None:
@@ -67,45 +72,101 @@ class CFGraph:
 
     def add_node(
         self,
-        node: CFNode,
-        edges: Dict[str, CFNode],
+        node: NodeType,
+        *,
+        edges: Optional[Mapping[str, NodeType]] = None,
     ):
         """
-        Create a new control-flow node and add it to the graph.
+        Add a new node, along with edges to existing nodes to the graph.
 
         Parameters
         ----------
-        node : CFNode
+        node
             The node to be added to the graph.
-        edges : dict
-            Mapping from edge labels to target nodes.
-        ast_node : ast.AST, optional
-            Linked ast node.
-        annotation : str, optional
-            Text annotation for nodes that don't have a linked AST node.
-        """
-        self._add_node(node)
-        for name, target in edges.items():
-            self._add_edge(node, name, target)
+        edges
+            Edges from the given node, if any, provided as a mapping
+            from edge labels (strings) to target nodes. The target nodes
+            should already be in the graph.
 
-    def remove_node(self, node: CFNode) -> None:
+        Raises
+        ------
+        ValueError
+            If the given node is already in the graph, or if any of the target
+            nodes for edges are not already in the graph.
         """
-        Remove a node from the graph. Fails if there are edges to or
-        from that node.
+        if node in self:
+            raise ValueError(f"node {node} is already present in the graph")
+
+        self._add_node(node)
+        if edges is not None:
+            for label, target in edges.items():
+                if target not in self or target == node:
+                    raise ValueError(
+                        f"target {target} for edge {label} is not in the graph"
+                    )
+                self._add_edge(node, label, target)
+
+    def remove_node(self, node: NodeType) -> None:
         """
-        assert not self._backedges[node]
-        assert not self._edges[node]
+        Remove an isolated node from the graph.
+
+        Fails if there are edges to or from that node: all edges must be removed
+        before it's possible to remove the node itself.
+
+        Parameters
+        ----------
+        node: NodeType
+            The node to be removed.
+
+        Raises
+        ------
+        ValueError
+            If the node is not in the graph, or if the node has incoming or
+            outgoing edges.
+        """
+        if node not in self._nodes:
+            raise ValueError(f"node {node} not present in the graph")
+        if self._edges[node]:
+            raise ValueError(f"node {node} is not isolated: it has forward edges")
+        if self._backedges[node]:
+            raise ValueError(f"node {node} is not isolated: it has back edges")
+
         self._nodes.remove(node)
 
-    def collapse_node(self, dummy: CFNode, target: CFNode) -> None:
+    def collapse_node(self, dummy: NodeType, target: NodeType) -> None:
         """
         Identify two nodes.
 
-        Identifies the *dummy* node with the *target* node, and
-        removes the *dummy* node from the graph. The dummy node
-        should not have any outward edges.
+        Identifies the *dummy* node with the *target* node, and removes the
+        *dummy* node from the graph. The dummy node should not have any outward
+        edges.
+
+        Note that this is the only mechanism for introducing cycles into the graph.
+
+        Parameters
+        ----------
+        dummy
+            Node to be collapsed and removed
+        target
+            Node to identify *dummy* with
+
+        Raises
+        ------
+        ValueError
+            If *dummy* has any outward edges, or if either of dummy or target is not
+            in the graph.
         """
-        assert not self._edges[dummy]
+        if dummy not in self:
+            raise ValueError(f"node {dummy} is not in the graph")
+
+        if target not in self:
+            raise ValueError(f"node {target} is not in the graph")
+
+        if self._edges[dummy]:
+            raise ValueError(f"node {dummy} has outward edges")
+
+        if dummy == target:
+            raise ValueError(f"nodes {dummy} and {target} must be distinct")
 
         edges_to_dummy = self.edges_to(dummy)
         for source, label in edges_to_dummy.copy():
@@ -116,42 +177,52 @@ class CFGraph:
 
     # Functions for examining or traversing the graph.
 
-    def edge(self, source: CFNode, label: str) -> CFNode:
+    def edge(self, source: NodeType, label: str) -> NodeType:
         """
         Get the target of a given edge.
         """
         return self._edges[source][label]
 
-    def edge_labels(self, source: CFNode) -> Set[str]:
+    def edge_labels(self, source: NodeType) -> Set[str]:
         """
         Get labels of all edges.
         """
         return set(self._edges[source].keys())
 
-    def edges_to(self, target: CFNode) -> Set[Tuple[CFNode, str]]:
+    def edges_to(self, target: NodeType) -> Set[Tuple[NodeType, str]]:
         """
         Set of pairs (source, label) representing edges to this node.
         """
         return self._backedges[target]
 
+    # Support for membership testibng
+
+    def __contains__(self, node: NodeType) -> bool:
+        """
+        Determine whether a given node is contained in the graph.
+        """
+        return node in self._nodes
+
     # Low-level functions
 
-    def _add_node(self, node: CFNode) -> None:
+    def _add_node(self, node: NodeType) -> None:
         """
-        Add a node to the graph. Raises on an attempt to add a node that
-        already exists.
+        Add a node to the graph. Raises ValueError on an attempt to add a node that's
+        already in the graph.
         """
         assert node not in self._nodes
+
         self._nodes.add(node)
         self._edges[node] = {}
         self._backedges[node] = set()
 
-    def _add_edge(self, source: CFNode, label: str, target: CFNode) -> None:
+    def _add_edge(self, source: NodeType, label: str, target: NodeType) -> None:
         """
         Add a labelled edge to the graph. Raises if an edge from the given
         source, with the given label, already exists.
         """
         assert source in self._nodes
+
         assert target in self._nodes
         assert label not in self._edges[source]
         self._edges[source][label] = target
@@ -159,7 +230,7 @@ class CFGraph:
         assert (source, label) not in self._backedges[target]
         self._backedges[target].add((source, label))
 
-    def _remove_edge(self, source: CFNode, label: str) -> None:
+    def _remove_edge(self, source: NodeType, label: str) -> None:
         """
         Remove a labelled edge from the graph.
         """

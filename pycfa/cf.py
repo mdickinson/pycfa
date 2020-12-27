@@ -105,7 +105,7 @@ class CFAnalysis:
             The newly-created node.
         """
         node = CFNode(ast_node=ast_node, annotation=annotation)
-        self._graph.add_node(node, edges)
+        self._graph.add_node(node, edges=edges)
         return node
 
     def _analyse_declaration(
