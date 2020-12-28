@@ -1,3 +1,17 @@
+# Copyright 2020 Mark Dickinson. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Analyse control flow for a piece of Python code.
 
@@ -7,9 +21,7 @@ Aid in detection of things like unreachable code.
 # TODO: add node types, and document edge labels for each node type?
 
 # TODO: Better context management (more functional).
-# TODO: graphing
 # TODO: remove use of self.graph in tests
-# TODO: license headers
 
 
 import ast
@@ -29,7 +41,7 @@ from pycfa.cf import (
 )
 
 
-class TestCFAnalyser(unittest.TestCase):
+class TestCFAnalysis(unittest.TestCase):
     def test_analyse_noop_function(self):
         code = """\
 def f():
@@ -1167,8 +1179,12 @@ async def beckett():
     # Helper methods
 
     def _function_context(self, code):
-        (function_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
-        self.assertIsInstance(function_node, (ast.AsyncFunctionDef, ast.FunctionDef))
+        (function_node,) = compile(
+            code, "test_cf", "exec", ast.PyCF_ONLY_AST
+        ).body
+        self.assertIsInstance(
+            function_node, (ast.AsyncFunctionDef, ast.FunctionDef)
+        )
 
         graph = CFAnalysis.from_function(function_node)
         context = graph.context
@@ -1200,7 +1216,9 @@ async def beckett():
         return context, context[ENTERC]
 
     def _class_context(self, code):
-        (module_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
+        (module_node,) = compile(
+            code, "test_cf", "exec", ast.PyCF_ONLY_AST
+        ).body
         self.assertIsInstance(module_node, ast.ClassDef)
 
         graph = CFAnalysis.from_class(module_node)

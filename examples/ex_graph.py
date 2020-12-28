@@ -1,3 +1,17 @@
+# Copyright 2020 Mark Dickinson. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import ast
 
 import pygraphviz as pgv
@@ -30,7 +44,9 @@ for node in graph._nodes:
     kwds = dict(shape="box")
     if node.ast_node is not None:
         lineno = node.ast_node.lineno
-        kwds.update(label=f"{lineno}: {lines[node.ast_node.lineno - 1].strip()}")
+        kwds.update(
+            label=f"{lineno}: {lines[node.ast_node.lineno - 1].strip()}"
+        )
     elif node.annotation is not None:
         kwds.update(label=node.annotation)
     G.add_node(id(node), **kwds)

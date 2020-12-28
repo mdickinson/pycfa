@@ -1,3 +1,17 @@
+# Copyright 2020 Mark Dickinson. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Analyse control flow for a piece of Python code.
 
@@ -126,12 +140,15 @@ class CFAnalysis:
         """
         return context[NEXTC]
 
-    def _analyse_generic(self, statement: ast.stmt, context: Context) -> CFNode:
+    def _analyse_generic(
+        self, statement: ast.stmt, context: Context
+    ) -> CFNode:
         """
         Analyse a generic statement that doesn't affect control flow.
         """
         return self.new_node(
-            edges={RAISE: context[RAISEC], NEXT: context[NEXTC]}, ast_node=statement
+            edges={RAISE: context[RAISEC], NEXT: context[NEXTC]},
+            ast_node=statement,
         )
 
     def _analyse_loop(
@@ -163,7 +180,9 @@ class CFAnalysis:
 
         return loop_node
 
-    def _analyse_try_except_else(self, statement: ast.Try, context: Context) -> CFNode:
+    def _analyse_try_except_else(
+        self, statement: ast.Try, context: Context
+    ) -> CFNode:
         """
         Analyse the try-except-else part of a try statement. The finally
         part is ignored, as though it weren't present.
@@ -187,7 +206,9 @@ class CFAnalysis:
 
         body_context = context.copy()
         body_context[RAISEC] = raise_node
-        body_context[NEXTC] = self.analyse_statements(statement.orelse, context)
+        body_context[NEXTC] = self.analyse_statements(
+            statement.orelse, context
+        )
         body_node = self.analyse_statements(statement.body, body_context)
 
         return self.new_node(edges={NEXT: body_node}, ast_node=statement)
@@ -206,25 +227,33 @@ class CFAnalysis:
             ast_node=statement,
         )
 
-    def analyse_AnnAssign(self, statement: ast.AnnAssign, context: Context) -> CFNode:
+    def analyse_AnnAssign(
+        self, statement: ast.AnnAssign, context: Context
+    ) -> CFNode:
         """
         Analyse an annotated assignment statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Assert(self, statement: ast.Assert, context: Context) -> CFNode:
+    def analyse_Assert(
+        self, statement: ast.Assert, context: Context
+    ) -> CFNode:
         """
         Analyse an assert statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Assign(self, statement: ast.Assign, context: Context) -> CFNode:
+    def analyse_Assign(
+        self, statement: ast.Assign, context: Context
+    ) -> CFNode:
         """
         Analyse an assignment statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_AsyncFor(self, statement: ast.AsyncFor, context: Context) -> CFNode:
+    def analyse_AsyncFor(
+        self, statement: ast.AsyncFor, context: Context
+    ) -> CFNode:
         """
         Analyse an async for statement.
         """
@@ -238,13 +267,17 @@ class CFAnalysis:
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_AsyncWith(self, statement: ast.AsyncWith, context: Context) -> CFNode:
+    def analyse_AsyncWith(
+        self, statement: ast.AsyncWith, context: Context
+    ) -> CFNode:
         """
         Analyse an async with statement.
         """
         return self._analyse_with(statement, context)
 
-    def analyse_AugAssign(self, statement: ast.AugAssign, context: Context) -> CFNode:
+    def analyse_AugAssign(
+        self, statement: ast.AugAssign, context: Context
+    ) -> CFNode:
         """
         Analyse an augmented assignment statement.
         """
@@ -256,19 +289,27 @@ class CFAnalysis:
         """
         return self.new_node(edges={NEXT: context[BREAK]}, ast_node=statement)
 
-    def analyse_ClassDef(self, statement: ast.ClassDef, context: Context) -> CFNode:
+    def analyse_ClassDef(
+        self, statement: ast.ClassDef, context: Context
+    ) -> CFNode:
         """
         Analyse a class definition.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Continue(self, statement: ast.Continue, context: Context) -> CFNode:
+    def analyse_Continue(
+        self, statement: ast.Continue, context: Context
+    ) -> CFNode:
         """
         Analyse a continue statement.
         """
-        return self.new_node(edges={NEXT: context[CONTINUE]}, ast_node=statement)
+        return self.new_node(
+            edges={NEXT: context[CONTINUE]}, ast_node=statement
+        )
 
-    def analyse_Delete(self, statement: ast.Delete, context: Context) -> CFNode:
+    def analyse_Delete(
+        self, statement: ast.Delete, context: Context
+    ) -> CFNode:
         """
         Analyse a del statement.
         """
@@ -294,7 +335,9 @@ class CFAnalysis:
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Global(self, statement: ast.Global, context: Context) -> CFNode:
+    def analyse_Global(
+        self, statement: ast.Global, context: Context
+    ) -> CFNode:
         """
         Analyse a global statement
         """
@@ -313,19 +356,25 @@ class CFAnalysis:
             ast_node=statement,
         )
 
-    def analyse_Import(self, statement: ast.Import, context: Context) -> CFNode:
+    def analyse_Import(
+        self, statement: ast.Import, context: Context
+    ) -> CFNode:
         """
         Analyse an import statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_ImportFrom(self, statement: ast.ImportFrom, context: Context) -> CFNode:
+    def analyse_ImportFrom(
+        self, statement: ast.ImportFrom, context: Context
+    ) -> CFNode:
         """
         Analyse a from ... import statement.
         """
         return self._analyse_generic(statement, context)
 
-    def analyse_Nonlocal(self, statement: ast.Nonlocal, context: Context) -> CFNode:
+    def analyse_Nonlocal(
+        self, statement: ast.Nonlocal, context: Context
+    ) -> CFNode:
         """
         Analyse a nonlocal statement
         """
@@ -341,14 +390,20 @@ class CFAnalysis:
         """
         Analyse a raise statement.
         """
-        return self.new_node(edges={RAISE: context[RAISEC]}, ast_node=statement)
+        return self.new_node(
+            edges={RAISE: context[RAISEC]}, ast_node=statement
+        )
 
-    def analyse_Return(self, statement: ast.Return, context: Context) -> CFNode:
+    def analyse_Return(
+        self, statement: ast.Return, context: Context
+    ) -> CFNode:
         """
         Analyse a return statement.
         """
         if statement.value is None:
-            return self.new_node(edges={NEXT: context[RETURN]}, ast_node=statement)
+            return self.new_node(
+                edges={NEXT: context[RETURN]}, ast_node=statement
+            )
         else:
             return self.new_node(
                 edges={NEXT: context[RETURN_VALUE], RAISE: context[RAISEC]},
@@ -384,7 +439,8 @@ class CFAnalysis:
         # For each actual node in the context (excluding duplicates),
         # create a corresponding dummy node.
         dummy_nodes = {
-            node: self.new_node(annotation="<dummy>") for node in set(context.values())
+            node: self.new_node(annotation="<dummy>")
+            for node in set(context.values())
         }
 
         # Analyse the try-except-else part of the statement using those dummy
@@ -392,7 +448,9 @@ class CFAnalysis:
         try_except_else_context = {
             key: dummy_nodes[node] for key, node in context.items()
         }
-        entry_node = self._analyse_try_except_else(statement, try_except_else_context)
+        entry_node = self._analyse_try_except_else(
+            statement, try_except_else_context
+        )
 
         # Now iterate through the dummy nodes. For those that aren't reached,
         # remove them. For those that are, replace with the corresponding

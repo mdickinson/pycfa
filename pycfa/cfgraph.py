@@ -1,3 +1,17 @@
+# Copyright 2020 Mark Dickinson. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 The CFGraph class provides the graph structure for the control-flow graph.
 
@@ -102,7 +116,9 @@ class CFGraph(Generic[NodeType]):
         if node not in self._nodes:
             raise ValueError(f"node {node} not present in the graph")
         if self._edges[node]:
-            raise ValueError(f"node {node} is not isolated: it has forward edges")
+            raise ValueError(
+                f"node {node} is not isolated: it has forward edges"
+            )
         if self._backedges[node]:
             raise ValueError(f"node {node} is not isolated: it has back edges")
 
@@ -191,7 +207,9 @@ class CFGraph(Generic[NodeType]):
         self._edges[node] = {}
         self._backedges[node] = set()
 
-    def _add_edge(self, source: NodeType, label: str, target: NodeType) -> None:
+    def _add_edge(
+        self, source: NodeType, label: str, target: NodeType
+    ) -> None:
         """
         Add a labelled edge to the graph.
         """
