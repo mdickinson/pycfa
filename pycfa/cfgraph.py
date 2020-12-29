@@ -34,7 +34,6 @@ Nodes can be any hashable object.
 
 from typing import Dict, Generic, Mapping, Optional, Set, Tuple, TypeVar
 
-
 #: Type of nodes. For now, require only that nodes are hashable.
 NodeType = TypeVar("NodeType")
 

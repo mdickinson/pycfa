@@ -19,13 +19,7 @@ Tests for CFAnalyser class.
 import ast
 import unittest
 
-from pycfa.cfanalyser import (
-    CFAnalyser,
-    ELSE,
-    ENTER,
-    NEXT,
-    RAISE,
-)
+from pycfa.cfanalyser import CFAnalyser, ELSE, ENTER, NEXT, RAISE
 
 
 class TestCFAnalyser(unittest.TestCase):
