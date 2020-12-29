@@ -16,7 +16,7 @@ import ast
 
 import pygraphviz as pgv
 
-from pycfa.cf import CFAnalyser
+from pycfa.cfanalyser import CFAnalyser
 
 code = """\
 def f():
@@ -34,7 +34,7 @@ lines = code.splitlines(keepends=True)
 
 
 (function_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
-analysis = CFAnalyser.from_function(function_node)
+analysis = CFAnalyser().analyse_function(function_node)
 
 graph = analysis._graph
 
