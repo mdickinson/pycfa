@@ -942,7 +942,12 @@ def f():
 
         except_node = analysis.edge(raise_node, RAISE)
         self.assertEdges(analysis, except_node, {ENTER, ELSE, RAISE})
-        self.assertEdge(analysis, except_node, RAISE, analysis.edge(except_node, ELSE))
+        self.assertEdge(
+            analysis,
+            except_node,
+            RAISE,
+            analysis.edge(except_node, ELSE),
+        )
 
         finally_raise_node = analysis.edge(except_node, RAISE)
         self.assertEdges(analysis, finally_raise_node, {NEXT, RAISE})

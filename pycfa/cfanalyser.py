@@ -17,10 +17,10 @@ Analyse control flow for a piece of Python code.
 
 Aid in detection of things like unreachable code.
 """
-# from __future__ import annotations
 
 import ast
 import contextlib
+
 from typing import Dict, List, Mapping, Optional, Union
 
 from pycfa.cfanalysis import CFAnalysis
@@ -486,7 +486,11 @@ class CFAnalyser:
         return_node = self._new_node(annotation="<return-with-value>")
 
         with self._updated_context(
-            {RAISEC: raise_node, LEAVE: leave_node, RETURN: return_node}
+            {
+                RAISEC: raise_node,
+                LEAVE: leave_node,
+                RETURN: return_node,
+            }
         ):
             entry_node = self._analyse_statements(ast_node.body, next=leave_node)
 

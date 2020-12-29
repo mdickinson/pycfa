@@ -32,7 +32,15 @@ Parallel edges (with different labels) and self-loops are permitted.
 Nodes can be any hashable object.
 """
 
-from typing import Dict, Generic, Mapping, Optional, Set, Tuple, TypeVar
+from typing import (
+    Dict,
+    Generic,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
 #: Type of nodes. For now, require only that nodes are hashable.
 NodeType = TypeVar("NodeType")
