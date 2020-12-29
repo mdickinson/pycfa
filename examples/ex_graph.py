@@ -16,7 +16,7 @@ import ast
 
 import pygraphviz as pgv
 
-from pycfa.cf import CFAnalysis
+from pycfa.cf import CFAnalyser
 
 code = """\
 def f():
@@ -34,7 +34,7 @@ lines = code.splitlines(keepends=True)
 
 
 (function_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
-analysis = CFAnalysis.from_function(function_node)
+analysis = CFAnalyser.from_function(function_node)
 
 graph = analysis._graph
 
@@ -44,9 +44,7 @@ for node in graph._nodes:
     kwds = dict(shape="box")
     if node.ast_node is not None:
         lineno = node.ast_node.lineno
-        kwds.update(
-            label=f"{lineno}: {lines[node.ast_node.lineno - 1].strip()}"
-        )
+        kwds.update(label=f"{lineno}: {lines[node.ast_node.lineno - 1].strip()}")
     elif node.annotation is not None:
         kwds.update(label=node.annotation)
     G.add_node(id(node), **kwds)

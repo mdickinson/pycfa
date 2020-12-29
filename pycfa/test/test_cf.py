@@ -13,64 +13,53 @@
 # limitations under the License.
 
 """
-Analyse control flow for a piece of Python code.
-
-Aid in detection of things like unreachable code.
+Tests for CFAnalyser class.
 """
-
-# TODO: add node types, and document edge labels for each node type?
-# TODO: Better context management (more functional).
-
 
 import ast
 import unittest
 
 from pycfa.cf import (
-    CFAnalysis,
+    CFAnalyser,
     ELSE,
     ENTER,
-    ENTERC,
     NEXT,
-    NEXTC,
     RAISE,
-    RAISEC,
-    RETURN,
-    RETURN_VALUE,
 )
 
 
-class TestCFAnalysis(unittest.TestCase):
+class TestCFAnalyser(unittest.TestCase):
     def test_analyse_noop_function(self):
         code = """\
 def f():
     pass
 """
-        graph, context, pass_node = self._function_context(code)
+        analysis, pass_node = self._function_context(code)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
-        self.assertEdge(graph, pass_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, pass_node, {NEXT})
+        self.assertEdge(analysis, pass_node, NEXT, analysis.return_without_value)
 
     def test_analyse_single_expr_statement(self):
         code = """\
 def f():
     do_something()
 """
-        graph, context, stmt_node = self._function_context(code)
+        analysis, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Expr)
-        self.assertEdges(graph, stmt_node, {NEXT, RAISE})
-        self.assertEdge(graph, stmt_node, NEXT, context[RETURN])
-        self.assertEdge(graph, stmt_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, stmt_node, {NEXT, RAISE})
+        self.assertEdge(analysis, stmt_node, NEXT, analysis.return_without_value)
+        self.assertEdge(analysis, stmt_node, RAISE, analysis.raise_node)
 
     def test_analyse_assign(self):
         code = """\
 def f():
     a = 123
 """
-        graph, context, stmt_node = self._function_context(code)
+        analysis, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Assign)
-        self.assertEdges(graph, stmt_node, {NEXT, RAISE})
-        self.assertEdge(graph, stmt_node, NEXT, context[RETURN])
-        self.assertEdge(graph, stmt_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, stmt_node, {NEXT, RAISE})
+        self.assertEdge(analysis, stmt_node, NEXT, analysis.return_without_value)
+        self.assertEdge(analysis, stmt_node, RAISE, analysis.raise_node)
 
     def test_analyse_multiple_statements(self):
         code = """\
@@ -78,47 +67,47 @@ def f():
     do_something()
     a += do_something_else()
 """
-        graph, context, stmt1_node = self._function_context(code)
+        analysis, stmt1_node = self._function_context(code)
         self.assertNodetype(stmt1_node, ast.Expr)
-        self.assertEdges(graph, stmt1_node, {NEXT, RAISE})
-        self.assertEdge(graph, stmt1_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, stmt1_node, {NEXT, RAISE})
+        self.assertEdge(analysis, stmt1_node, RAISE, analysis.raise_node)
 
-        stmt2_node = graph.edge(stmt1_node, NEXT)
+        stmt2_node = analysis.edge(stmt1_node, NEXT)
         self.assertNodetype(stmt2_node, ast.AugAssign)
-        self.assertEdges(graph, stmt2_node, {NEXT, RAISE})
-        self.assertEdge(graph, stmt2_node, NEXT, context[RETURN])
-        self.assertEdge(graph, stmt2_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, stmt2_node, {NEXT, RAISE})
+        self.assertEdge(analysis, stmt2_node, NEXT, analysis.return_without_value)
+        self.assertEdge(analysis, stmt2_node, RAISE, analysis.raise_node)
 
     def test_return_with_no_value(self):
         code = """\
 def f():
     return
 """
-        graph, context, stmt_node = self._function_context(code)
+        analysis, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Return)
-        self.assertEdges(graph, stmt_node, {NEXT})
-        self.assertEdge(graph, stmt_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, stmt_node, {NEXT})
+        self.assertEdge(analysis, stmt_node, NEXT, analysis.return_without_value)
 
     def test_return_with_value(self):
         code = """\
 def f():
     return None
 """
-        graph, context, stmt_node = self._function_context(code)
+        analysis, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Return)
-        self.assertEdges(graph, stmt_node, {NEXT, RAISE})
-        self.assertEdge(graph, stmt_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, stmt_node, NEXT, context[RETURN_VALUE])
+        self.assertEdges(analysis, stmt_node, {NEXT, RAISE})
+        self.assertEdge(analysis, stmt_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, stmt_node, NEXT, analysis.return_with_value)
 
     def test_raise(self):
         code = """\
 def f():
     raise TypeError("don't call me")
 """
-        graph, context, stmt_node = self._function_context(code)
+        analysis, stmt_node = self._function_context(code)
         self.assertNodetype(stmt_node, ast.Raise)
-        self.assertEdges(graph, stmt_node, {RAISE})
-        self.assertEdge(graph, stmt_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, stmt_node, {RAISE})
+        self.assertEdge(analysis, stmt_node, RAISE, analysis.raise_node)
 
     def test_if(self):
         code = """\
@@ -126,17 +115,17 @@ def f():
     if condition:
         a = 123
 """
-        graph, context, if_node = self._function_context(code)
+        analysis, if_node = self._function_context(code)
         self.assertNodetype(if_node, ast.If)
-        self.assertEdges(graph, if_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, if_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, if_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, if_node, RAISE, analysis.raise_node)
 
-        if_branch = graph.edge(if_node, ENTER)
+        if_branch = analysis.edge(if_node, ENTER)
         self.assertNodetype(if_branch, ast.Assign)
-        self.assertEdges(graph, if_branch, {NEXT, RAISE})
-        self.assertEdge(graph, if_branch, RAISE, context[RAISEC])
-        self.assertEdge(graph, if_branch, NEXT, context[RETURN])
-        self.assertEdge(graph, if_node, ELSE, context[RETURN])
+        self.assertEdges(analysis, if_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, if_branch, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, if_branch, NEXT, analysis.return_without_value)
+        self.assertEdge(analysis, if_node, ELSE, analysis.return_without_value)
 
     def test_if_else(self):
         code = """\
@@ -146,22 +135,22 @@ def f():
     else:
         b = 456
 """
-        graph, context, if_node = self._function_context(code)
+        analysis, if_node = self._function_context(code)
         self.assertNodetype(if_node, ast.If)
-        self.assertEdges(graph, if_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, if_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, if_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, if_node, RAISE, analysis.raise_node)
 
-        if_branch = graph.edge(if_node, ENTER)
+        if_branch = analysis.edge(if_node, ENTER)
         self.assertNodetype(if_branch, ast.Assign)
-        self.assertEdges(graph, if_branch, {NEXT, RAISE})
-        self.assertEdge(graph, if_branch, RAISE, context[RAISEC])
-        self.assertEdge(graph, if_branch, NEXT, context[RETURN])
+        self.assertEdges(analysis, if_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, if_branch, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, if_branch, NEXT, analysis.return_without_value)
 
-        else_branch = graph.edge(if_node, ELSE)
+        else_branch = analysis.edge(if_node, ELSE)
         self.assertNodetype(else_branch, ast.Assign)
-        self.assertEdges(graph, else_branch, {NEXT, RAISE})
-        self.assertEdge(graph, else_branch, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_branch, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, else_branch, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_branch, NEXT, analysis.return_without_value)
 
     def test_if_elif_else(self):
         code = """\
@@ -173,33 +162,33 @@ def f():
     else:
         a = something_else_again()
 """
-        graph, context, if_node = self._function_context(code)
+        analysis, if_node = self._function_context(code)
         self.assertNodetype(if_node, ast.If)
-        self.assertEdges(graph, if_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, if_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, if_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, if_node, RAISE, analysis.raise_node)
 
-        if_branch = graph.edge(if_node, ENTER)
+        if_branch = analysis.edge(if_node, ENTER)
         self.assertNodetype(if_branch, ast.Assign)
-        self.assertEdges(graph, if_branch, {NEXT, RAISE})
-        self.assertEdge(graph, if_branch, RAISE, context[RAISEC])
-        self.assertEdge(graph, if_branch, NEXT, context[RETURN])
+        self.assertEdges(analysis, if_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, if_branch, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, if_branch, NEXT, analysis.return_without_value)
 
-        elif_node = graph.edge(if_node, ELSE)
+        elif_node = analysis.edge(if_node, ELSE)
         self.assertNodetype(elif_node, ast.If)
-        self.assertEdges(graph, elif_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, elif_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, elif_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, elif_node, RAISE, analysis.raise_node)
 
-        elif_branch = graph.edge(elif_node, ENTER)
+        elif_branch = analysis.edge(elif_node, ENTER)
         self.assertNodetype(elif_branch, ast.Assign)
-        self.assertEdges(graph, elif_branch, {NEXT, RAISE})
-        self.assertEdge(graph, elif_branch, RAISE, context[RAISEC])
-        self.assertEdge(graph, elif_branch, NEXT, context[RETURN])
+        self.assertEdges(analysis, elif_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, elif_branch, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, elif_branch, NEXT, analysis.return_without_value)
 
-        else_branch = graph.edge(elif_node, ELSE)
+        else_branch = analysis.edge(elif_node, ELSE)
         self.assertNodetype(else_branch, ast.Assign)
-        self.assertEdges(graph, else_branch, {NEXT, RAISE})
-        self.assertEdge(graph, else_branch, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_branch, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, else_branch, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_branch, NEXT, analysis.return_without_value)
 
     def test_return_in_if_and_else(self):
         code = """\
@@ -209,22 +198,22 @@ def f():
     else:
         return 456
 """
-        graph, context, if_node = self._function_context(code)
+        analysis, if_node = self._function_context(code)
         self.assertNodetype(if_node, ast.If)
-        self.assertEdges(graph, if_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, if_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, if_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, if_node, RAISE, analysis.raise_node)
 
-        if_branch = graph.edge(if_node, ENTER)
+        if_branch = analysis.edge(if_node, ENTER)
         self.assertNodetype(if_branch, ast.Return)
-        self.assertEdges(graph, if_branch, {NEXT, RAISE})
-        self.assertEdge(graph, if_branch, NEXT, context[RETURN_VALUE])
-        self.assertEdge(graph, if_branch, RAISE, context[RAISEC])
+        self.assertEdges(analysis, if_branch, {NEXT, RAISE})
+        self.assertEdge(analysis, if_branch, NEXT, analysis.return_with_value)
+        self.assertEdge(analysis, if_branch, RAISE, analysis.raise_node)
 
-        else_node = graph.edge(if_node, ELSE)
+        else_node = analysis.edge(if_node, ELSE)
         self.assertNodetype(else_node, ast.Return)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, NEXT, context[RETURN_VALUE])
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_with_value)
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
 
     def test_plain_return_in_if_and_else(self):
         code = """\
@@ -234,20 +223,20 @@ def f():
     else:
         return
 """
-        graph, context, if_node = self._function_context(code)
+        analysis, if_node = self._function_context(code)
         self.assertNodetype(if_node, ast.If)
-        self.assertEdges(graph, if_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, if_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, if_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, if_node, RAISE, analysis.raise_node)
 
-        if_branch = graph.edge(if_node, ENTER)
+        if_branch = analysis.edge(if_node, ENTER)
         self.assertNodetype(if_branch, ast.Return)
-        self.assertEdges(graph, if_branch, {NEXT})
-        self.assertEdge(graph, if_branch, NEXT, context[RETURN])
+        self.assertEdges(analysis, if_branch, {NEXT})
+        self.assertEdge(analysis, if_branch, NEXT, analysis.return_without_value)
 
-        else_node = graph.edge(if_node, ELSE)
+        else_node = analysis.edge(if_node, ELSE)
         self.assertNodetype(else_node, ast.Return)
-        self.assertEdges(graph, else_node, {NEXT})
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT})
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_unreachable_statements(self):
         code = """\
@@ -256,15 +245,15 @@ def f():
     return
     do_something_else()
 """
-        graph, context, stmt1_node = self._function_context(code)
+        analysis, stmt1_node = self._function_context(code)
         self.assertNodetype(stmt1_node, ast.Expr)
-        self.assertEdges(graph, stmt1_node, {NEXT, RAISE})
-        self.assertEdge(graph, stmt1_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, stmt1_node, {NEXT, RAISE})
+        self.assertEdge(analysis, stmt1_node, RAISE, analysis.raise_node)
 
-        stmt2_node = graph.edge(stmt1_node, NEXT)
+        stmt2_node = analysis.edge(stmt1_node, NEXT)
         self.assertNodetype(stmt2_node, ast.Return)
-        self.assertEdges(graph, stmt2_node, {NEXT})
-        self.assertEdge(graph, stmt2_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, stmt2_node, {NEXT})
+        self.assertEdge(analysis, stmt2_node, NEXT, analysis.return_without_value)
 
     def test_while(self):
         code = """\
@@ -272,17 +261,17 @@ def f():
     while some_condition:
         do_something()
 """
-        graph, context, while_node = self._function_context(code)
+        analysis, while_node = self._function_context(code)
         self.assertNodetype(while_node, ast.While)
-        self.assertEdges(graph, while_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, while_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, while_node, ELSE, context[RETURN])
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, while_node, ELSE, analysis.return_without_value)
 
-        body_node = graph.edge(while_node, ENTER)
+        body_node = analysis.edge(while_node, ENTER)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, while_node)
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, while_node)
 
     def test_while_else(self):
         code = """\
@@ -292,22 +281,22 @@ def f():
     else:
         do_no_break_stuff()
 """
-        graph, context, while_node = self._function_context(code)
+        analysis, while_node = self._function_context(code)
         self.assertNodetype(while_node, ast.While)
-        self.assertEdges(graph, while_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, while_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
 
-        body_node = graph.edge(while_node, ENTER)
+        body_node = analysis.edge(while_node, ENTER)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, while_node)
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, while_node)
 
-        else_node = graph.edge(while_node, ELSE)
+        else_node = analysis.edge(while_node, ELSE)
         self.assertNodetype(else_node, ast.Expr)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_while_with_continue(self):
         code = """\
@@ -319,32 +308,32 @@ def f():
     else:
         do_no_break_stuff()
 """
-        graph, context, while_node = self._function_context(code)
+        analysis, while_node = self._function_context(code)
         self.assertNodetype(while_node, ast.While)
-        self.assertEdges(graph, while_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, while_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
 
-        test_node = graph.edge(while_node, ENTER)
+        test_node = analysis.edge(while_node, ENTER)
         self.assertNodetype(test_node, ast.If)
-        self.assertEdge(graph, test_node, RAISE, context[RAISEC])
-        self.assertEdges(graph, test_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, test_node, RAISE, analysis.raise_node)
+        self.assertEdges(analysis, test_node, {ENTER, ELSE, RAISE})
 
-        continue_node = graph.edge(test_node, ENTER)
+        continue_node = analysis.edge(test_node, ENTER)
         self.assertNodetype(continue_node, ast.Continue)
-        self.assertEdges(graph, continue_node, {NEXT})
-        self.assertEdge(graph, continue_node, NEXT, while_node)
+        self.assertEdges(analysis, continue_node, {NEXT})
+        self.assertEdge(analysis, continue_node, NEXT, while_node)
 
-        body_node = graph.edge(test_node, ELSE)
+        body_node = analysis.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, while_node)
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, while_node)
 
-        else_node = graph.edge(while_node, ELSE)
+        else_node = analysis.edge(while_node, ELSE)
         self.assertNodetype(else_node, ast.Expr)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_while_with_break(self):
         code = """\
@@ -356,32 +345,32 @@ def f():
     else:
         do_no_break_stuff()
 """
-        graph, context, while_node = self._function_context(code)
+        analysis, while_node = self._function_context(code)
         self.assertNodetype(while_node, ast.While)
-        self.assertEdges(graph, while_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, while_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
 
-        test_node = graph.edge(while_node, ENTER)
+        test_node = analysis.edge(while_node, ENTER)
         self.assertNodetype(test_node, ast.If)
-        self.assertEdge(graph, test_node, RAISE, context[RAISEC])
-        self.assertEdges(graph, test_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, test_node, RAISE, analysis.raise_node)
+        self.assertEdges(analysis, test_node, {ENTER, ELSE, RAISE})
 
-        break_node = graph.edge(test_node, ENTER)
+        break_node = analysis.edge(test_node, ENTER)
         self.assertNodetype(break_node, ast.Break)
-        self.assertEdges(graph, break_node, {NEXT})
-        self.assertEdge(graph, break_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, break_node, {NEXT})
+        self.assertEdge(analysis, break_node, NEXT, analysis.return_without_value)
 
-        body_node = graph.edge(test_node, ELSE)
+        body_node = analysis.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, while_node)
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, while_node)
 
-        else_node = graph.edge(while_node, ELSE)
+        else_node = analysis.edge(while_node, ELSE)
         self.assertNodetype(else_node, ast.Expr)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_while_with_two_statements(self):
         code = """\
@@ -390,22 +379,22 @@ def f():
         do_something()
         do_something_else()
 """
-        graph, context, while_node = self._function_context(code)
+        analysis, while_node = self._function_context(code)
         self.assertNodetype(while_node, ast.While)
-        self.assertEdges(graph, while_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, while_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, while_node, ELSE, context[RETURN])
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, while_node, ELSE, analysis.return_without_value)
 
-        body_node1 = graph.edge(while_node, ENTER)
+        body_node1 = analysis.edge(while_node, ENTER)
         self.assertNodetype(body_node1, ast.Expr)
-        self.assertEdges(graph, body_node1, {NEXT, RAISE})
-        self.assertEdge(graph, body_node1, RAISE, context[RAISEC])
+        self.assertEdges(analysis, body_node1, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node1, RAISE, analysis.raise_node)
 
-        body_node2 = graph.edge(body_node1, NEXT)
+        body_node2 = analysis.edge(body_node1, NEXT)
         self.assertNodetype(body_node2, ast.Expr)
-        self.assertEdges(graph, body_node2, {NEXT, RAISE})
-        self.assertEdge(graph, body_node2, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node2, NEXT, while_node)
+        self.assertEdges(analysis, body_node2, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node2, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node2, NEXT, while_node)
 
     def test_for_with_continue(self):
         code = """\
@@ -417,32 +406,32 @@ def f():
     else:
         do_no_break_stuff()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
         self.assertNodetype(for_node, ast.For)
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        test_node = graph.edge(for_node, ENTER)
+        test_node = analysis.edge(for_node, ENTER)
         self.assertNodetype(test_node, ast.If)
-        self.assertEdge(graph, test_node, RAISE, context[RAISEC])
-        self.assertEdges(graph, test_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, test_node, RAISE, analysis.raise_node)
+        self.assertEdges(analysis, test_node, {ENTER, ELSE, RAISE})
 
-        continue_node = graph.edge(test_node, ENTER)
+        continue_node = analysis.edge(test_node, ENTER)
         self.assertNodetype(continue_node, ast.Continue)
-        self.assertEdges(graph, continue_node, {NEXT})
-        self.assertEdge(graph, continue_node, NEXT, for_node)
+        self.assertEdges(analysis, continue_node, {NEXT})
+        self.assertEdge(analysis, continue_node, NEXT, for_node)
 
-        body_node = graph.edge(test_node, ELSE)
+        body_node = analysis.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, for_node)
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, for_node)
 
-        else_node = graph.edge(for_node, ELSE)
+        else_node = analysis.edge(for_node, ELSE)
         self.assertNodetype(else_node, ast.Expr)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_for_with_break(self):
         code = """\
@@ -454,32 +443,32 @@ def f():
     else:
         do_no_break_stuff()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
         self.assertNodetype(for_node, ast.For)
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        test_node = graph.edge(for_node, ENTER)
+        test_node = analysis.edge(for_node, ENTER)
         self.assertNodetype(test_node, ast.If)
-        self.assertEdge(graph, test_node, RAISE, context[RAISEC])
-        self.assertEdges(graph, test_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, test_node, RAISE, analysis.raise_node)
+        self.assertEdges(analysis, test_node, {ENTER, ELSE, RAISE})
 
-        break_node = graph.edge(test_node, ENTER)
+        break_node = analysis.edge(test_node, ENTER)
         self.assertNodetype(break_node, ast.Break)
-        self.assertEdges(graph, break_node, {NEXT})
-        self.assertEdge(graph, break_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, break_node, {NEXT})
+        self.assertEdge(analysis, break_node, NEXT, analysis.return_without_value)
 
-        body_node = graph.edge(test_node, ELSE)
+        body_node = analysis.edge(test_node, ELSE)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, for_node)
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, for_node)
 
-        else_node = graph.edge(for_node, ELSE)
+        else_node = analysis.edge(for_node, ELSE)
         self.assertNodetype(else_node, ast.Expr)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_try_except_else(self):
         code = """\
@@ -493,36 +482,36 @@ def f():
     else:
         all_okay()
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Expr)
-        self.assertEdges(graph, try_node, {NEXT, RAISE})
+        self.assertEdges(analysis, try_node, {NEXT, RAISE})
 
-        except1_node = graph.edge(try_node, RAISE)
+        except1_node = analysis.edge(try_node, RAISE)
         self.assertNodetype(except1_node, ast.expr)
-        self.assertEdges(graph, except1_node, {ENTER, ELSE, RAISE})
-        self.assertEdge(graph, except1_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, except1_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, except1_node, RAISE, analysis.raise_node)
 
-        match1_node = graph.edge(except1_node, ENTER)
+        match1_node = analysis.edge(except1_node, ENTER)
         self.assertNodetype(match1_node, ast.Expr)
-        self.assertEdges(graph, match1_node, {NEXT, RAISE})
-        self.assertEdge(graph, match1_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, match1_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, match1_node, {NEXT, RAISE})
+        self.assertEdge(analysis, match1_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, match1_node, NEXT, analysis.return_without_value)
 
-        match2_node = graph.edge(except1_node, ELSE)
+        match2_node = analysis.edge(except1_node, ELSE)
         self.assertNodetype(match2_node, ast.Expr)
-        self.assertEdges(graph, match2_node, {NEXT, RAISE})
-        self.assertEdge(graph, match2_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, match2_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, match2_node, {NEXT, RAISE})
+        self.assertEdge(analysis, match2_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, match2_node, NEXT, analysis.return_without_value)
 
-        else_node = graph.edge(try_node, NEXT)
+        else_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(else_node, ast.Expr)
-        self.assertEdges(graph, else_node, {NEXT, RAISE})
-        self.assertEdge(graph, else_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, else_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, else_node, {NEXT, RAISE})
+        self.assertEdge(analysis, else_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, else_node, NEXT, analysis.return_without_value)
 
     def test_try_except_pass(self):
         code = """\
@@ -532,19 +521,19 @@ def f():
     except:
         pass
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Expr)
-        self.assertEdges(graph, try_node, {NEXT, RAISE})
-        self.assertEdge(graph, try_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, try_node, {NEXT, RAISE})
+        self.assertEdge(analysis, try_node, NEXT, analysis.return_without_value)
 
-        pass_node = graph.edge(try_node, RAISE)
+        pass_node = analysis.edge(try_node, RAISE)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
-        self.assertEdge(graph, pass_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, pass_node, {NEXT})
+        self.assertEdge(analysis, pass_node, NEXT, analysis.return_without_value)
 
     def test_raise_in_try(self):
         code = """\
@@ -557,24 +546,24 @@ def f():
         # unreachable
         return
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Raise)
-        self.assertEdges(graph, try_node, {RAISE})
+        self.assertEdges(analysis, try_node, {RAISE})
 
-        except_node = graph.edge(try_node, RAISE)
+        except_node = analysis.edge(try_node, RAISE)
         self.assertNodetype(except_node, ast.expr)
-        self.assertEdges(graph, except_node, {ENTER, ELSE, RAISE})
-        self.assertEdge(graph, except_node, ELSE, context[RAISEC])
-        self.assertEdge(graph, except_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, except_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, except_node, ELSE, analysis.raise_node)
+        self.assertEdge(analysis, except_node, RAISE, analysis.raise_node)
 
-        pass_node = graph.edge(except_node, ENTER)
+        pass_node = analysis.edge(except_node, ENTER)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
-        self.assertEdge(graph, pass_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, pass_node, {NEXT})
+        self.assertEdge(analysis, pass_node, NEXT, analysis.return_without_value)
 
     def test_try_finally_pass(self):
         code = """\
@@ -584,19 +573,19 @@ def f():
     finally:
         do_something()
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Pass)
-        self.assertEdges(graph, try_node, {NEXT})
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        finally_node = graph.edge(try_node, NEXT)
+        finally_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.return_without_value)
 
     def test_try_finally_raise(self):
         code = """\
@@ -606,19 +595,19 @@ def f():
     finally:
         do_something()
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Raise)
-        self.assertEdges(graph, try_node, {RAISE})
+        self.assertEdges(analysis, try_node, {RAISE})
 
-        finally_node = graph.edge(try_node, RAISE)
+        finally_node = analysis.edge(try_node, RAISE)
         self.assertNodetype(finally_node, ast.Expr)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RAISEC])
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.raise_node)
 
     def test_try_finally_return(self):
         code = """\
@@ -628,19 +617,19 @@ def f():
     finally:
         do_something()
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Return)
-        self.assertEdges(graph, try_node, {NEXT})
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        finally_node = graph.edge(try_node, NEXT)
+        finally_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.return_without_value)
 
     def test_try_finally_return_value(self):
         code = """\
@@ -650,25 +639,25 @@ def f():
     finally:
         do_something()
 """
-        graph, context, start_node = self._function_context(code)
+        analysis, start_node = self._function_context(code)
         self.assertNodetype(start_node, ast.Try)
-        self.assertEdges(graph, start_node, {NEXT})
+        self.assertEdges(analysis, start_node, {NEXT})
 
-        try_node = graph.edge(start_node, NEXT)
+        try_node = analysis.edge(start_node, NEXT)
         self.assertNodetype(try_node, ast.Return)
-        self.assertEdges(graph, try_node, {NEXT, RAISE})
+        self.assertEdges(analysis, try_node, {NEXT, RAISE})
 
-        finally_node = graph.edge(try_node, NEXT)
+        finally_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RETURN_VALUE])
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.return_with_value)
 
-        finally2_node = graph.edge(try_node, RAISE)
+        finally2_node = analysis.edge(try_node, RAISE)
         self.assertNodetype(finally2_node, ast.Expr)
-        self.assertEdges(graph, finally2_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally2_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally2_node, NEXT, context[RAISEC])
+        self.assertEdges(analysis, finally2_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally2_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally2_node, NEXT, analysis.raise_node)
 
     def test_try_finally_break(self):
         code = """\
@@ -679,25 +668,25 @@ def f():
         finally:
             do_something()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
         self.assertNodetype(for_node, ast.For)
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
+        try_node = analysis.edge(for_node, ENTER)
         self.assertNodetype(try_node, ast.Try)
-        self.assertEdges(graph, try_node, {NEXT})
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        break_node = graph.edge(try_node, NEXT)
+        break_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(break_node, ast.Break)
-        self.assertEdges(graph, break_node, {NEXT})
+        self.assertEdges(analysis, break_node, {NEXT})
 
-        finally_node = graph.edge(break_node, NEXT)
+        finally_node = analysis.edge(break_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.return_without_value)
 
     def test_try_finally_continue(self):
         code = """\
@@ -708,24 +697,24 @@ def f():
         finally:
             do_something()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        continue_node = graph.edge(try_node, NEXT)
+        continue_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(continue_node, ast.Continue)
-        self.assertEdges(graph, continue_node, {NEXT})
+        self.assertEdges(analysis, continue_node, {NEXT})
 
-        finally_node = graph.edge(continue_node, NEXT)
+        finally_node = analysis.edge(continue_node, NEXT)
         self.assertNodetype(finally_node, ast.Expr)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, for_node)
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, for_node)
 
     def test_return_value_in_finally(self):
         code = """\
@@ -735,16 +724,16 @@ def f():
     finally:
         return some_value()
 """
-        graph, context, try_node = self._function_context(code)
-        self.assertEdges(graph, try_node, {NEXT})
+        analysis, try_node = self._function_context(code)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        raise_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, raise_node, {RAISE})
+        raise_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, raise_node, {RAISE})
 
-        return_node = graph.edge(raise_node, RAISE)
-        self.assertEdges(graph, return_node, {NEXT, RAISE})
-        self.assertEdge(graph, return_node, NEXT, context[RETURN_VALUE])
-        self.assertEdge(graph, return_node, RAISE, context[RAISEC])
+        return_node = analysis.edge(raise_node, RAISE)
+        self.assertEdges(analysis, return_node, {NEXT, RAISE})
+        self.assertEdge(analysis, return_node, NEXT, analysis.return_with_value)
+        self.assertEdge(analysis, return_node, RAISE, analysis.raise_node)
 
     def test_return_in_finally(self):
         code = """\
@@ -754,15 +743,15 @@ def f():
     finally:
         return
 """
-        graph, context, try_node = self._function_context(code)
-        self.assertEdges(graph, try_node, {NEXT})
+        analysis, try_node = self._function_context(code)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        raise_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, raise_node, {RAISE})
+        raise_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, raise_node, {RAISE})
 
-        return_node = graph.edge(raise_node, RAISE)
-        self.assertEdges(graph, return_node, {NEXT})
-        self.assertEdge(graph, return_node, NEXT, context[RETURN])
+        return_node = analysis.edge(raise_node, RAISE)
+        self.assertEdges(analysis, return_node, {NEXT})
+        self.assertEdge(analysis, return_node, NEXT, analysis.return_without_value)
 
     def test_raise_in_finally(self):
         code = """\
@@ -772,17 +761,17 @@ def f():
     finally:
         raise SomeException()
 """
-        graph, context, try_node = self._function_context(code)
-        self.assertEdges(graph, try_node, {NEXT})
+        analysis, try_node = self._function_context(code)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        pass_node = graph.edge(try_node, NEXT)
+        pass_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
+        self.assertEdges(analysis, pass_node, {NEXT})
 
-        raise_node = graph.edge(pass_node, NEXT)
+        raise_node = analysis.edge(pass_node, NEXT)
         self.assertNodetype(raise_node, ast.Raise)
-        self.assertEdges(graph, raise_node, {RAISE})
-        self.assertEdge(graph, raise_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, raise_node, {RAISE})
+        self.assertEdge(analysis, raise_node, RAISE, analysis.raise_node)
 
     def test_break_in_finally(self):
         code = """\
@@ -794,21 +783,21 @@ def f():
         finally:
             break
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        return_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, return_node, {NEXT})
+        return_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, return_node, {NEXT})
 
-        break_node = graph.edge(return_node, NEXT)
-        self.assertEdges(graph, break_node, {NEXT})
-        self.assertEdge(graph, break_node, NEXT, context[RETURN])
+        break_node = analysis.edge(return_node, NEXT)
+        self.assertEdges(analysis, break_node, {NEXT})
+        self.assertEdge(analysis, break_node, NEXT, analysis.return_without_value)
 
     def test_continue_in_finally(self):
         code = """\
@@ -820,21 +809,21 @@ def f():
         finally:
             continue
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        raise_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, raise_node, {RAISE})
+        raise_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, raise_node, {RAISE})
 
-        continue_node = graph.edge(raise_node, RAISE)
-        self.assertEdges(graph, continue_node, {NEXT})
-        self.assertEdge(graph, continue_node, NEXT, for_node)
+        continue_node = analysis.edge(raise_node, RAISE)
+        self.assertEdges(analysis, continue_node, {NEXT})
+        self.assertEdge(analysis, continue_node, NEXT, for_node)
 
     def test_continue_in_except_no_finally(self):
         code = """\
@@ -845,21 +834,21 @@ def f():
         except:
             continue
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        raise_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, raise_node, {RAISE})
+        raise_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, raise_node, {RAISE})
 
-        continue_node = graph.edge(raise_node, RAISE)
-        self.assertEdges(graph, continue_node, {NEXT})
-        self.assertEdge(graph, continue_node, NEXT, for_node)
+        continue_node = analysis.edge(raise_node, RAISE)
+        self.assertEdges(analysis, continue_node, {NEXT})
+        self.assertEdge(analysis, continue_node, NEXT, for_node)
 
     def test_continue_in_except(self):
         code = """\
@@ -872,25 +861,67 @@ def f():
         finally:
             do_cleanup()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        raise_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, raise_node, {RAISE})
+        raise_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, raise_node, {RAISE})
 
-        continue_node = graph.edge(raise_node, RAISE)
-        self.assertEdges(graph, continue_node, {NEXT})
+        continue_node = analysis.edge(raise_node, RAISE)
+        self.assertEdges(analysis, continue_node, {NEXT})
 
-        finally_node = graph.edge(continue_node, NEXT)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, for_node)
+        finally_node = analysis.edge(continue_node, NEXT)
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, for_node)
+
+    def test_break_in_inner_loop(self):
+        code = """\
+def f():
+    while some_condition():
+        while some_other_condition():
+            break
+"""
+        analysis, while_node = self._function_context(code)
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
+
+        inner_while_node = analysis.edge(while_node, ENTER)
+        self.assertEdges(analysis, inner_while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, inner_while_node, ELSE, while_node)
+        self.assertEdge(analysis, inner_while_node, RAISE, analysis.raise_node)
+
+        break_node = analysis.edge(inner_while_node, ENTER)
+        self.assertEdges(analysis, break_node, {NEXT})
+        self.assertEdge(analysis, break_node, NEXT, while_node)
+
+    def test_continue_in_inner_loop(self):
+        code = """\
+def f():
+    while some_condition():
+        while some_other_condition():
+            continue
+"""
+        analysis, while_node = self._function_context(code)
+        self.assertEdges(analysis, while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, while_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, while_node, RAISE, analysis.raise_node)
+
+        inner_while_node = analysis.edge(while_node, ENTER)
+        self.assertEdges(analysis, inner_while_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, inner_while_node, ELSE, while_node)
+        self.assertEdge(analysis, inner_while_node, RAISE, analysis.raise_node)
+
+        continue_node = analysis.edge(inner_while_node, ENTER)
+        self.assertEdges(analysis, continue_node, {NEXT})
+        self.assertEdge(analysis, continue_node, NEXT, inner_while_node)
 
     def test_break_in_except(self):
         code = """\
@@ -903,36 +934,34 @@ def f():
         finally:
             do_cleanup()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        raise_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, raise_node, {RAISE})
+        raise_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, raise_node, {RAISE})
 
-        except_node = graph.edge(raise_node, RAISE)
-        self.assertEdges(graph, except_node, {ENTER, ELSE, RAISE})
-        self.assertEdge(
-            graph, except_node, RAISE, graph.edge(except_node, ELSE)
-        )
+        except_node = analysis.edge(raise_node, RAISE)
+        self.assertEdges(analysis, except_node, {ENTER, ELSE, RAISE})
+        self.assertEdge(analysis, except_node, RAISE, analysis.edge(except_node, ELSE))
 
-        finally_raise_node = graph.edge(except_node, RAISE)
-        self.assertEdges(graph, finally_raise_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_raise_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_raise_node, NEXT, context[RAISEC])
+        finally_raise_node = analysis.edge(except_node, RAISE)
+        self.assertEdges(analysis, finally_raise_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_raise_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_raise_node, NEXT, analysis.raise_node)
 
-        break_node = graph.edge(except_node, ENTER)
-        self.assertEdges(graph, break_node, {NEXT})
+        break_node = analysis.edge(except_node, ENTER)
+        self.assertEdges(analysis, break_node, {NEXT})
 
-        finally_node = graph.edge(break_node, NEXT)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RETURN])
+        finally_node = analysis.edge(break_node, NEXT)
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.return_without_value)
 
     def test_return_in_try_else(self):
         code = """\
@@ -947,34 +976,34 @@ def f():
         finally:
             do_cleanup()
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
 
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(for_node, ENTER)
-        self.assertEdges(graph, try_node, {NEXT})
+        try_node = analysis.edge(for_node, ENTER)
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        do_node = graph.edge(try_node, NEXT)
-        self.assertEdges(graph, do_node, {NEXT, RAISE})
+        do_node = analysis.edge(try_node, NEXT)
+        self.assertEdges(analysis, do_node, {NEXT, RAISE})
 
-        pass_node = graph.edge(do_node, RAISE)
+        pass_node = analysis.edge(do_node, RAISE)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
+        self.assertEdges(analysis, pass_node, {NEXT})
 
-        finally1_node = graph.edge(pass_node, NEXT)
-        self.assertEdges(graph, finally1_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally1_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally1_node, NEXT, for_node)
+        finally1_node = analysis.edge(pass_node, NEXT)
+        self.assertEdges(analysis, finally1_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally1_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally1_node, NEXT, for_node)
 
-        else_node = graph.edge(do_node, NEXT)
-        self.assertEdges(graph, else_node, {NEXT})
+        else_node = analysis.edge(do_node, NEXT)
+        self.assertEdges(analysis, else_node, {NEXT})
 
-        finally_node = graph.edge(else_node, NEXT)
-        self.assertEdges(graph, finally_node, {NEXT, RAISE})
-        self.assertEdge(graph, finally_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, finally_node, NEXT, context[RETURN])
+        finally_node = analysis.edge(else_node, NEXT)
+        self.assertEdges(analysis, finally_node, {NEXT, RAISE})
+        self.assertEdge(analysis, finally_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, finally_node, NEXT, analysis.return_without_value)
 
     def test_finally_paths_combined(self):
         # We potentially generate multiple paths for a finally block,
@@ -990,32 +1019,32 @@ def f():
     finally:
         do_cleanup()
 """
-        graph, _, try_node = self._function_context(code)
+        analysis, try_node = self._function_context(code)
 
         # The 'return' in the else branch should lead to the same place
         # as the handle_exception() success in the except branch.
-        do_node = graph.edge(try_node, NEXT)
-        raised_node = graph.edge(do_node, RAISE)
-        ok_node = graph.edge(do_node, NEXT)
+        do_node = analysis.edge(try_node, NEXT)
+        raised_node = analysis.edge(do_node, RAISE)
+        ok_node = analysis.edge(do_node, NEXT)
 
-        raised_next = graph.edge(raised_node, NEXT)
-        ok_next = graph.edge(ok_node, NEXT)
+        raised_next = analysis.edge(raised_node, NEXT)
+        ok_next = analysis.edge(ok_node, NEXT)
 
         self.assertEqual(raised_next, ok_next)
 
     def test_empty_module(self):
         code = ""
-        graph, context, enter_node = self._module_context(code)
-        self.assertEqual(enter_node, context[NEXTC])
+        analysis, enter_node = self._module_context(code)
+        self.assertEqual(enter_node, analysis.leave_node)
 
     def test_just_pass(self):
         code = """\
 pass
 """
-        graph, context, enter_node = self._module_context(code)
+        analysis, enter_node = self._module_context(code)
         self.assertNodetype(enter_node, ast.Pass)
-        self.assertEdges(graph, enter_node, {NEXT})
-        self.assertEdge(graph, enter_node, NEXT, context[NEXTC])
+        self.assertEdges(analysis, enter_node, {NEXT})
+        self.assertEdge(analysis, enter_node, NEXT, analysis.leave_node)
 
     def test_statements_outside_function(self):
         code = """\
@@ -1025,40 +1054,40 @@ try:
 except:
     pass
 """
-        graph, context, assign_node = self._module_context(code)
+        analysis, assign_node = self._module_context(code)
         self.assertNodetype(assign_node, ast.Assign)
-        self.assertEdges(graph, assign_node, {NEXT, RAISE})
-        self.assertEdge(graph, assign_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, assign_node, {NEXT, RAISE})
+        self.assertEdge(analysis, assign_node, RAISE, analysis.raise_node)
 
-        try_node = graph.edge(assign_node, NEXT)
+        try_node = analysis.edge(assign_node, NEXT)
         self.assertNodetype(try_node, ast.Try)
-        self.assertEdges(graph, try_node, {NEXT})
+        self.assertEdges(analysis, try_node, {NEXT})
 
-        do_node = graph.edge(try_node, NEXT)
+        do_node = analysis.edge(try_node, NEXT)
         self.assertNodetype(do_node, ast.Expr)
-        self.assertEdges(graph, do_node, {NEXT, RAISE})
-        self.assertEdge(graph, do_node, NEXT, context[NEXTC])
+        self.assertEdges(analysis, do_node, {NEXT, RAISE})
+        self.assertEdge(analysis, do_node, NEXT, analysis.leave_node)
 
-        pass_node = graph.edge(do_node, RAISE)
+        pass_node = analysis.edge(do_node, RAISE)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
-        self.assertEdge(graph, pass_node, NEXT, context[NEXTC])
+        self.assertEdges(analysis, pass_node, {NEXT})
+        self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
     def test_with(self):
         code = """\
 with some_cm() as name:
     do_something()
 """
-        graph, context, with_node = self._module_context(code)
+        analysis, with_node = self._module_context(code)
         self.assertNodetype(with_node, ast.With)
-        self.assertEdges(graph, with_node, {ENTER, RAISE})
-        self.assertEdge(graph, with_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, with_node, {ENTER, RAISE})
+        self.assertEdge(analysis, with_node, RAISE, analysis.raise_node)
 
-        body_node = graph.edge(with_node, ENTER)
+        body_node = analysis.edge(with_node, ENTER)
         self.assertNodetype(body_node, ast.Expr)
-        self.assertEdges(graph, body_node, {NEXT, RAISE})
-        self.assertEdge(graph, body_node, RAISE, context[RAISEC])
-        self.assertEdge(graph, body_node, NEXT, context[NEXTC])
+        self.assertEdges(analysis, body_node, {NEXT, RAISE})
+        self.assertEdge(analysis, body_node, RAISE, analysis.raise_node)
+        self.assertEdge(analysis, body_node, NEXT, analysis.leave_node)
 
     def test_async_for(self):
         code = """\
@@ -1066,17 +1095,17 @@ async def f():
     async for x in g():
         yield x*x
 """
-        graph, context, for_node = self._function_context(code)
+        analysis, for_node = self._function_context(code)
         self.assertNodetype(for_node, ast.AsyncFor)
-        self.assertEdges(graph, for_node, {ELSE, ENTER, RAISE})
-        self.assertEdge(graph, for_node, ELSE, context[RETURN])
-        self.assertEdge(graph, for_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, for_node, {ELSE, ENTER, RAISE})
+        self.assertEdge(analysis, for_node, ELSE, analysis.return_without_value)
+        self.assertEdge(analysis, for_node, RAISE, analysis.raise_node)
 
-        yield_node = graph.edge(for_node, ENTER)
+        yield_node = analysis.edge(for_node, ENTER)
         self.assertNodetype(yield_node, ast.Expr)
-        self.assertEdges(graph, yield_node, {NEXT, RAISE})
-        self.assertEdge(graph, yield_node, NEXT, for_node)
-        self.assertEdge(graph, yield_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, yield_node, {NEXT, RAISE})
+        self.assertEdge(analysis, yield_node, NEXT, for_node)
+        self.assertEdge(analysis, yield_node, RAISE, analysis.raise_node)
 
     def test_async_with(self):
         code = """\
@@ -1084,15 +1113,15 @@ async def f():
     async with my_async_context():
         pass
 """
-        graph, context, with_node = self._function_context(code)
+        analysis, with_node = self._function_context(code)
         self.assertNodetype(with_node, ast.AsyncWith)
-        self.assertEdges(graph, with_node, {ENTER, RAISE})
-        self.assertEdge(graph, with_node, RAISE, context[RAISEC])
+        self.assertEdges(analysis, with_node, {ENTER, RAISE})
+        self.assertEdge(analysis, with_node, RAISE, analysis.raise_node)
 
-        pass_node = graph.edge(with_node, ENTER)
+        pass_node = analysis.edge(with_node, ENTER)
         self.assertNodetype(pass_node, ast.Pass)
-        self.assertEdges(graph, pass_node, {NEXT})
-        self.assertEdge(graph, pass_node, NEXT, context[RETURN])
+        self.assertEdges(analysis, pass_node, {NEXT})
+        self.assertEdge(analysis, pass_node, NEXT, analysis.return_without_value)
 
     def test_classdef(self):
         code = """\
@@ -1100,19 +1129,22 @@ class SomeClass:
     def some_method(self, arg1, arg2):
         return bob
 """
-        graph, context, initial = self._class_context(code)
+        analysis, initial = self._class_context(code)
         self.assertNodetype(initial, ast.FunctionDef)
-        self.assertEdges(graph, initial, {NEXT, RAISE})
-        self.assertEdge(graph, initial, NEXT, context[NEXTC])
-        self.assertEdge(graph, initial, RAISE, context[RAISEC])
+        self.assertEdges(analysis, initial, {NEXT, RAISE})
+        self.assertEdge(analysis, initial, NEXT, analysis.leave_node)
+        self.assertEdge(analysis, initial, RAISE, analysis.raise_node)
 
     def test_global(self):
         code = """\
 def f():
     global bob
 """
-        graph, context, node = self._function_context(code)
-        self.assertEqual(node, context[RETURN])
+        analysis, _ = self._function_context(code)
+        node = analysis.entry_node
+        self.assertNodetype(node, ast.Global)
+        self.assertEdges(analysis, node, {NEXT})
+        self.assertEdge(analysis, node, NEXT, analysis.return_without_value)
 
     def test_nonlocal(self):
         code = """\
@@ -1124,10 +1156,11 @@ def f(bob):
         (function_node,) = module_node.body
         (inner_function,) = function_node.body
 
-        graph = CFAnalysis.from_function(inner_function)
-        context = graph.context
-        node = context[ENTERC]
-        self.assertEqual(node, context[RETURN])
+        analysis = CFAnalyser().analyse_function(inner_function)
+        node = analysis.entry_node
+        self.assertNodetype(node, ast.Nonlocal)
+        self.assertEdges(analysis, node, {NEXT})
+        self.assertEdge(analysis, node, NEXT, analysis.return_without_value)
 
     def test_assorted_simple_statements(self):
         code = """\
@@ -1144,34 +1177,87 @@ x : int = 2
 async def beckett():
     await godot()
 """
-        graph, context, node = self._module_context(code)
+        analysis, node = self._module_context(code)
 
         for _ in range(9):
             self.assertNodetype(node, ast.stmt)
-            self.assertEdges(graph, node, {NEXT, RAISE})
-            self.assertEdge(graph, node, RAISE, context[RAISEC])
-            node = graph.edge(node, NEXT)
+            self.assertEdges(analysis, node, {NEXT, RAISE})
+            self.assertEdge(analysis, node, RAISE, analysis.raise_node)
+            node = analysis.edge(node, NEXT)
 
-        self.assertEqual(node, context[NEXTC])
+        self.assertEqual(node, analysis.leave_node)
+
+    def test_function_cant_raise(self):
+        code = """\
+def f():
+    try:
+        something_or_other()
+    except:
+        pass
+"""
+        analysis, _ = self._function_context(code)
+        with self.assertRaises(AttributeError):
+            analysis.raise_node
+
+    def test_function_no_return_value(self):
+        code = """\
+def f():
+    pass
+"""
+        analysis, _ = self._function_context(code)
+        with self.assertRaises(AttributeError):
+            analysis.return_with_value
+
+    def test_function_no_return_without_value(self):
+        code = """\
+def f():
+    return 123
+"""
+        analysis, _ = self._function_context(code)
+        with self.assertRaises(AttributeError):
+            analysis.return_without_value
+
+    def test_class_cant_raise(self):
+        code = """\
+class A:
+    try:
+        something_or_other()
+    except:
+        pass
+"""
+        analysis, _ = self._class_context(code)
+        with self.assertRaises(AttributeError):
+            analysis.raise_node
+
+    def test_module_cant_raise(self):
+        code = """\
+try:
+    something_or_other()
+except:
+    pass
+"""
+        analysis, _ = self._module_context(code)
+        with self.assertRaises(AttributeError):
+            analysis.raise_node
 
     # Assertions
 
-    def assertEdges(self, graph, node, edges):
+    def assertEdges(self, analysis, node, edges):
         """
         Assert that the outward edges from a node have the given names.
         """
-        self.assertEqual(graph.edge_labels(node), edges)
+        self.assertEqual(analysis.edge_labels(node), edges)
 
-    def assertEdge(self, graph, source, label, target):
+    def assertEdge(self, analysis, source, label, target):
         """
         Assert that the given edge from the given source maps to the
         given target.
         """
-        self.assertEqual(graph.edge(source, label), target)
+        self.assertEqual(analysis.edge(source, label), target)
 
     def assertNodetype(self, node, nodetype):
         """
-        Assert that the given control-flow graph node is associated
+        Assert that the given control-flow analysis node is associated
         to an ast node of the given type.
         """
         self.assertIsInstance(node.ast_node, nodetype)
@@ -1179,53 +1265,41 @@ async def beckett():
     # Helper methods
 
     def _function_context(self, code):
-        (function_node,) = compile(
-            code, "test_cf", "exec", ast.PyCF_ONLY_AST
-        ).body
-        self.assertIsInstance(
-            function_node, (ast.AsyncFunctionDef, ast.FunctionDef)
-        )
+        (function_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
+        self.assertIsInstance(function_node, (ast.AsyncFunctionDef, ast.FunctionDef))
 
-        graph = CFAnalysis.from_function(function_node)
-        context = graph.context
-        self.assertEqual(
-            sorted(context.keys()),
-            [ENTERC, RAISEC, RETURN, RETURN_VALUE],
-        )
-        self.assertEdges(graph, context[RAISEC], set())
-        self.assertEdges(graph, context[RETURN], set())
-        self.assertEdges(graph, context[RETURN_VALUE], set())
+        analysis = CFAnalyser().analyse_function(function_node)
+        if hasattr(analysis, "raise_node"):
+            self.assertEdges(analysis, analysis.raise_node, set())
+        if hasattr(analysis, "return_with_value"):
+            self.assertEdges(analysis, analysis.return_with_value, set())
+        if hasattr(analysis, "return_without_value"):
+            self.assertEdges(analysis, analysis.return_without_value, set())
 
-        return graph, context, context[ENTERC]
+        return analysis, analysis.entry_node
 
     def _module_context(self, code):
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
         self.assertIsInstance(module_node, ast.Module)
 
-        graph = CFAnalysis.from_module(module_node)
-        context = graph.context
-        self.assertEqual(
-            sorted(context.keys()),
-            [ENTERC, NEXTC, RAISEC],
-        )
-        self.assertEdges(graph, context[RAISEC], set())
-        self.assertEdges(graph, context[NEXTC], set())
+        analysis = CFAnalyser().analyse_module(module_node)
 
-        return graph, context, context[ENTERC]
+        if hasattr(analysis, "raise_node"):
+            self.assertEdges(analysis, analysis.raise_node, set())
+        if hasattr(analysis, "leave_node"):
+            self.assertEdges(analysis, analysis.leave_node, set())
+
+        return analysis, analysis.entry_node
 
     def _class_context(self, code):
-        (module_node,) = compile(
-            code, "test_cf", "exec", ast.PyCF_ONLY_AST
-        ).body
+        (module_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
         self.assertIsInstance(module_node, ast.ClassDef)
 
-        graph = CFAnalysis.from_class(module_node)
-        context = graph.context
-        self.assertEqual(
-            sorted(context.keys()),
-            [ENTERC, NEXTC, RAISEC],
-        )
-        self.assertEdges(graph, context[RAISEC], set())
-        self.assertEdges(graph, context[NEXTC], set())
+        analysis = CFAnalyser().analyse_class(module_node)
 
-        return graph, context, context[ENTERC]
+        if hasattr(analysis, "raise_node"):
+            self.assertEdges(analysis, analysis.raise_node, set())
+        if hasattr(analysis, "leave_node"):
+            self.assertEdges(analysis, analysis.leave_node, set())
+
+        return analysis, analysis.entry_node

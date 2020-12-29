@@ -20,19 +20,16 @@ Aid in detection of things like unreachable code.
 from __future__ import annotations
 
 import ast
-from typing import Dict, List, Optional, Set, Union
+import contextlib
+from typing import Dict, List, Mapping, Optional, Union
 
+from pycfa.cfanalysis import CFAnalysis, ENTERC, LEAVE, RAISEC, RETURN, RETURN_VALUE
 from pycfa.cfgraph import CFGraph
 from pycfa.cfnode import CFNode
 
 # Context labels
 BREAK = "break"
 CONTINUE = "continue"
-RETURN = "return"
-RETURN_VALUE = "return_value"
-NEXTC = "nextc"
-RAISEC = "raisec"
-ENTERC = "enterc"
 
 # Edge labels
 
@@ -63,7 +60,7 @@ ELSE = "else"
 Context = Dict[str, CFNode]
 
 
-class CFAnalysis:
+class CFAnalyser:
     """
     The control-flow analysis.
 
@@ -74,30 +71,16 @@ class CFAnalysis:
     #: The control-flow graph.
     _graph: CFGraph[CFNode]
 
-    #: Mapping from labels to particular nodes in the graph.
-    context: Context
+    #: Current context, while graph is under construction.
+    _context: Context
 
     def __init__(self) -> None:
         self._graph = CFGraph()
+        self._context = {}
 
-        # We'll usually want some named nodes. (For example, for a graph
-        # representing the control flow in a function, we'll want to mark the
-        # entry and exit nodes.) Those go in the dictionary below.
-        self.context = {}
+    # Graph building methods.
 
-    def edge(self, source: CFNode, label: str) -> CFNode:
-        """
-        Get the target of a given edge.
-        """
-        return self._graph.edge(source, label)
-
-    def edge_labels(self, source: CFNode) -> Set[str]:
-        """
-        Get labels of all edges.
-        """
-        return self._graph.edge_labels(source)
-
-    def new_node(
+    def _new_node(
         self,
         *,
         edges: Optional[Dict[str, CFNode]] = None,
@@ -129,288 +112,284 @@ class CFAnalysis:
         self._graph.add_node(node, edges=edges)
         return node
 
-    def _analyse_declaration(
-        self, statement: Union[ast.Global, ast.Nonlocal], context: Context
-    ) -> CFNode:
+    @contextlib.contextmanager
+    def _updated_context(self, updates: Mapping):
         """
-        Analyse a declaration (a global or nonlocal statement).
-
-        These statements are non-executable, so we don't create a node
-        for them. Instead, we simply return the NEXT node from the context.
+        Temporarily update the context dictionary with the given values.
         """
-        return context[NEXTC]
+        context = self._context
+        original_items = {
+            label: context[label] for label in updates if label in context
+        }
+        try:
+            self._context.update(updates)
+            yield
+        finally:
+            for label in updates:
+                if label in original_items:
+                    context[label] = original_items.pop(label)
+                else:
+                    del context[label]
 
-    def _analyse_generic(
-        self, statement: ast.stmt, context: Context
-    ) -> CFNode:
+    # General analysis helpers.
+
+    def _analyse_simple(self, statement: ast.stmt, *, next: CFNode) -> CFNode:
+        """
+        Analyse a simple non-control-flow statement that can't raise.
+
+        Examples are pass, global, nonlocal.
+        """
+        return self._new_node(edges={NEXT: next}, ast_node=statement)
+
+    def _analyse_generic(self, statement: ast.stmt, *, next: CFNode) -> CFNode:
         """
         Analyse a generic statement that doesn't affect control flow.
         """
-        return self.new_node(
-            edges={RAISE: context[RAISEC], NEXT: context[NEXTC]},
+        return self._new_node(
+            edges={RAISE: self._context[RAISEC], NEXT: next},
             ast_node=statement,
         )
 
     def _analyse_loop(
         self,
         statement: Union[ast.AsyncFor, ast.For, ast.While],
-        context: Context,
+        *,
+        next: CFNode,
     ) -> CFNode:
         """
-        Analyse a loop statement (for or while).
+        Analyse a loop statement (for, async for, or while).
         """
-        dummy_node = self.new_node(annotation="<dummy>")
+        # Node acting as target for the next iteration. We'll identify this
+        # with the loop entry node, once that exists.
+        dummy_node = self._new_node()
+        with self._updated_context({BREAK: next, CONTINUE: dummy_node}):
+            body_node = self._analyse_statements(statement.body, next=dummy_node)
 
-        body_context = context.copy()
-        body_context[BREAK] = context[NEXTC]
-        body_context[CONTINUE] = dummy_node
-        body_context[NEXTC] = dummy_node
-        body_node = self.analyse_statements(statement.body, body_context)
-
-        loop_node = self.new_node(
+        loop_node = self._new_node(
             edges={
-                RAISE: context[RAISEC],
-                ELSE: self.analyse_statements(statement.orelse, context),
+                RAISE: self._context[RAISEC],
+                ELSE: self._analyse_statements(statement.orelse, next=next),
                 ENTER: body_node,
             },
             ast_node=statement,
         )
 
         self._graph.collapse_node(dummy_node, loop_node)
-
         return loop_node
 
-    def _analyse_try_except_else(
-        self, statement: ast.Try, context: Context
-    ) -> CFNode:
+    def _analyse_statements(self, statements: List[ast.stmt], *, next) -> CFNode:
+        """
+        Analyse a sequence of statements.
+        """
+        for statement in reversed(statements):
+            analyse = getattr(self, "analyse_" + type(statement).__name__)
+            next = analyse(statement, next=next)
+        return next
+
+    def _analyse_try_except_else(self, statement: ast.Try, *, next: CFNode) -> CFNode:
         """
         Analyse the try-except-else part of a try statement. The finally
         part is ignored, as though it weren't present.
         """
         # Process handlers backwards; raise if the last handler doesn't match.
-        raise_node = context[RAISEC]
+        raise_node = self._context[RAISEC]
         for handler in reversed(statement.handlers):
-            match_node = self.analyse_statements(handler.body, context)
+            match_node = self._analyse_statements(handler.body, next=next)
             if handler.type is None:
                 # Bare except always matches, never raises.
                 raise_node = match_node
             else:
-                raise_node = self.new_node(
+                raise_node = self._new_node(
                     edges={
-                        RAISE: context[RAISEC],
+                        RAISE: self._context[RAISEC],
                         ENTER: match_node,
                         ELSE: raise_node,
                     },
                     ast_node=handler.type,
                 )
 
-        body_context = context.copy()
-        body_context[RAISEC] = raise_node
-        body_context[NEXTC] = self.analyse_statements(
-            statement.orelse, context
-        )
-        body_node = self.analyse_statements(statement.body, body_context)
+        else_node = self._analyse_statements(statement.orelse, next=next)
 
-        return self.new_node(edges={NEXT: body_node}, ast_node=statement)
+        with self._updated_context({RAISEC: raise_node}):
+            body_node = self._analyse_statements(statement.body, next=else_node)
+
+        return self._new_node(edges={NEXT: body_node}, ast_node=statement)
 
     def _analyse_with(
-        self, statement: Union[ast.AsyncWith, ast.With], context: Context
+        self,
+        statement: Union[ast.AsyncWith, ast.With],
+        *,
+        next: CFNode,
     ) -> CFNode:
         """
         Analyse a with or async with statement.
         """
-        return self.new_node(
+        with_node = self._new_node(
             edges={
-                ENTER: self.analyse_statements(statement.body, context),
-                RAISE: context[RAISEC],
+                ENTER: self._analyse_statements(
+                    statement.body,
+                    next=next,
+                ),
+                RAISE: self._context[RAISEC],
             },
             ast_node=statement,
         )
+        return with_node
 
-    def analyse_AnnAssign(
-        self, statement: ast.AnnAssign, context: Context
-    ) -> CFNode:
+    # Statement analyzers for particular AST node types.
+
+    def analyse_AnnAssign(self, statement: ast.AnnAssign, *, next: CFNode) -> CFNode:
         """
         Analyse an annotated assignment statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Assert(
-        self, statement: ast.Assert, context: Context
-    ) -> CFNode:
+    def analyse_Assert(self, statement: ast.Assert, *, next: CFNode) -> CFNode:
         """
         Analyse an assert statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Assign(
-        self, statement: ast.Assign, context: Context
-    ) -> CFNode:
+    def analyse_Assign(self, statement: ast.Assign, *, next: CFNode) -> CFNode:
         """
         Analyse an assignment statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_AsyncFor(
-        self, statement: ast.AsyncFor, context: Context
-    ) -> CFNode:
+    def analyse_AsyncFor(self, statement: ast.AsyncFor, *, next: CFNode) -> CFNode:
         """
         Analyse an async for statement.
         """
-        return self._analyse_loop(statement, context)
+        return self._analyse_loop(statement, next=next)
 
     def analyse_AsyncFunctionDef(
-        self, statement: ast.AsyncFunctionDef, context: Context
+        self, statement: ast.AsyncFunctionDef, *, next: CFNode
     ) -> CFNode:
         """
         Analyse an async function (coroutine) definition.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_AsyncWith(
-        self, statement: ast.AsyncWith, context: Context
-    ) -> CFNode:
+    def analyse_AsyncWith(self, statement: ast.AsyncWith, *, next: CFNode) -> CFNode:
         """
         Analyse an async with statement.
         """
-        return self._analyse_with(statement, context)
+        return self._analyse_with(statement, next=next)
 
-    def analyse_AugAssign(
-        self, statement: ast.AugAssign, context: Context
-    ) -> CFNode:
+    def analyse_AugAssign(self, statement: ast.AugAssign, *, next: CFNode) -> CFNode:
         """
         Analyse an augmented assignment statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Break(self, statement: ast.Break, context: Context) -> CFNode:
+    def analyse_Break(self, statement: ast.Break, *, next: CFNode) -> CFNode:
         """
         Analyse a break statement.
         """
-        return self.new_node(edges={NEXT: context[BREAK]}, ast_node=statement)
+        return self._new_node(edges={NEXT: self._context[BREAK]}, ast_node=statement)
 
-    def analyse_ClassDef(
-        self, statement: ast.ClassDef, context: Context
-    ) -> CFNode:
+    def analyse_ClassDef(self, statement: ast.ClassDef, *, next: CFNode) -> CFNode:
         """
         Analyse a class definition.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Continue(
-        self, statement: ast.Continue, context: Context
-    ) -> CFNode:
+    def analyse_Continue(self, statement: ast.Continue, *, next: CFNode) -> CFNode:
         """
         Analyse a continue statement.
         """
-        return self.new_node(
-            edges={NEXT: context[CONTINUE]}, ast_node=statement
-        )
+        return self._new_node(edges={NEXT: self._context[CONTINUE]}, ast_node=statement)
 
-    def analyse_Delete(
-        self, statement: ast.Delete, context: Context
-    ) -> CFNode:
+    def analyse_Delete(self, statement: ast.Delete, *, next: CFNode) -> CFNode:
         """
         Analyse a del statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Expr(self, statement: ast.Expr, context: Context) -> CFNode:
+    def analyse_Expr(self, statement: ast.Expr, *, next: CFNode) -> CFNode:
         """
         Analyse an expression (used as a statement).
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_For(self, statement: ast.For, context: Context) -> CFNode:
+    def analyse_For(self, statement: ast.For, *, next: CFNode) -> CFNode:
         """
         Analyse a for statement.
         """
-        return self._analyse_loop(statement, context)
+        return self._analyse_loop(statement, next=next)
 
     def analyse_FunctionDef(
-        self, statement: ast.FunctionDef, context: Context
+        self, statement: ast.FunctionDef, *, next: CFNode
     ) -> CFNode:
         """
         Analyse a function definition.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Global(
-        self, statement: ast.Global, context: Context
-    ) -> CFNode:
+    def analyse_Global(self, statement: ast.Global, *, next: CFNode) -> CFNode:
         """
         Analyse a global statement
         """
-        return self._analyse_declaration(statement, context)
+        return self._analyse_simple(statement, next=next)
 
-    def analyse_If(self, statement: ast.If, context: Context) -> CFNode:
+    def analyse_If(self, statement: ast.If, *, next: CFNode) -> CFNode:
         """
         Analyse an if statement.
         """
-        return self.new_node(
+        return self._new_node(
             edges={
-                ENTER: self.analyse_statements(statement.body, context),
-                ELSE: self.analyse_statements(statement.orelse, context),
-                RAISE: context[RAISEC],
+                ENTER: self._analyse_statements(statement.body, next=next),
+                ELSE: self._analyse_statements(statement.orelse, next=next),
+                RAISE: self._context[RAISEC],
             },
             ast_node=statement,
         )
 
-    def analyse_Import(
-        self, statement: ast.Import, context: Context
-    ) -> CFNode:
+    def analyse_Import(self, statement: ast.Import, *, next: CFNode) -> CFNode:
         """
         Analyse an import statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_ImportFrom(
-        self, statement: ast.ImportFrom, context: Context
-    ) -> CFNode:
+    def analyse_ImportFrom(self, statement: ast.ImportFrom, *, next: CFNode) -> CFNode:
         """
         Analyse a from ... import statement.
         """
-        return self._analyse_generic(statement, context)
+        return self._analyse_generic(statement, next=next)
 
-    def analyse_Nonlocal(
-        self, statement: ast.Nonlocal, context: Context
-    ) -> CFNode:
+    def analyse_Nonlocal(self, statement: ast.Nonlocal, *, next: CFNode) -> CFNode:
         """
-        Analyse a nonlocal statement
+        Analyse a nonlocal statement.
         """
-        return self._analyse_declaration(statement, context)
+        return self._analyse_simple(statement, next=next)
 
-    def analyse_Pass(self, statement: ast.Pass, context: Context) -> CFNode:
+    def analyse_Pass(self, statement: ast.Pass, *, next: CFNode) -> CFNode:
         """
         Analyse a pass statement.
         """
-        return self.new_node(edges={NEXT: context[NEXTC]}, ast_node=statement)
+        return self._analyse_simple(statement, next=next)
 
-    def analyse_Raise(self, statement: ast.Raise, context: Context) -> CFNode:
+    def analyse_Raise(self, statement: ast.Raise, *, next: CFNode) -> CFNode:
         """
         Analyse a raise statement.
         """
-        return self.new_node(
-            edges={RAISE: context[RAISEC]}, ast_node=statement
-        )
+        return self._new_node(edges={RAISE: self._context[RAISEC]}, ast_node=statement)
 
-    def analyse_Return(
-        self, statement: ast.Return, context: Context
-    ) -> CFNode:
+    def analyse_Return(self, statement: ast.Return, *, next: CFNode) -> CFNode:
         """
         Analyse a return statement.
         """
         if statement.value is None:
-            return self.new_node(
-                edges={NEXT: context[RETURN]}, ast_node=statement
+            return self._new_node(
+                edges={NEXT: self._context[RETURN]}, ast_node=statement
             )
         else:
-            return self.new_node(
-                edges={NEXT: context[RETURN_VALUE], RAISE: context[RAISEC]},
+            return self._new_node(
+                edges={NEXT: self._context[RETURN_VALUE], RAISE: self._context[RAISEC]},
                 ast_node=statement,
             )
 
-    def analyse_Try(self, statement: ast.Try, context: Context) -> CFNode:
+    def analyse_Try(self, statement: ast.Try, *, next: CFNode) -> CFNode:
         """
         Analyse a try statement.
         """
@@ -438,19 +417,18 @@ class CFAnalysis:
 
         # For each actual node in the context (excluding duplicates),
         # create a corresponding dummy node.
-        dummy_nodes = {
-            node: self.new_node(annotation="<dummy>")
-            for node in set(context.values())
-        }
+        dummy_nodes = {node: self._new_node() for node in set(self._context.values())}
+        dummy_nodes[next] = self._new_node()
 
         # Analyse the try-except-else part of the statement using those dummy
-        # nodes.
+        # nodes in place of the real ones.
         try_except_else_context = {
-            key: dummy_nodes[node] for key, node in context.items()
+            key: dummy_nodes[node] for key, node in self._context.items()
         }
-        entry_node = self._analyse_try_except_else(
-            statement, try_except_else_context
-        )
+        with self._updated_context(try_except_else_context):
+            entry_node = self._analyse_try_except_else(
+                statement, next=dummy_nodes[next]
+            )
 
         # Now iterate through the dummy nodes. For those that aren't reached,
         # remove them. For those that are, replace with the corresponding
@@ -461,73 +439,51 @@ class CFAnalysis:
         for end_node, dummy_node in dummy_nodes.items():
             if self._graph.edges_to(dummy_node):
                 # Dummy node is reachable from the try-except-else.
-                finally_context = context.copy()
-                finally_context[NEXTC] = end_node
-                finally_node = self.analyse_statements(
-                    statement.finalbody, finally_context
+                # Create a corresponding finally block.
+                finally_node = self._analyse_statements(
+                    statement.finalbody, next=end_node
                 )
-
                 self._graph.collapse_node(dummy_node, finally_node)
             else:
+                # Dummy node not reachable; remove it.
                 self._graph.remove_node(dummy_node)
 
         return entry_node
 
-    def analyse_While(self, statement: ast.While, context: Context) -> CFNode:
+    def analyse_While(self, statement: ast.While, *, next: CFNode) -> CFNode:
         """
         Analyse a while statement
         """
-        return self._analyse_loop(statement, context)
+        return self._analyse_loop(statement, next=next)
 
-    def analyse_With(self, statement: ast.With, context: Context) -> CFNode:
+    def analyse_With(self, statement: ast.With, *, next: CFNode) -> CFNode:
         """
         Analyse a with statement.
         """
-        return self._analyse_with(statement, context)
+        return self._analyse_with(statement, next=next)
 
-    def analyse_statements(
-        self, statements: List[ast.stmt], context: Context
-    ) -> CFNode:
-        """
-        Analyse a sequence of statements.
-        """
-        next = context[NEXTC]
-        for statement in reversed(statements):
-            statement_context = context.copy()
-            statement_context[NEXTC] = next
-
-            method_name = "analyse_" + type(statement).__name__
-            analyser = getattr(self, method_name)
-            next = analyser(statement, statement_context)
-
-        return next
-
-    @classmethod
-    def from_class(cls, ast_node: ast.ClassDef) -> CFAnalysis:
+    def analyse_class(self, ast_node: ast.ClassDef) -> CFAnalysis:
         """
         Construct a control flow graph for an ast.Module node.
         """
-        self = cls()
+        leave_node = self._new_node(annotation="<leave>")
+        raise_node = self._new_node(annotation="<raise>")
 
-        leave_node = self.new_node(annotation="<leave>")
-        raise_node = self.new_node(annotation="<raise>")
+        with self._updated_context({RAISEC: raise_node}):
+            enter_node = self._analyse_statements(ast_node.body, next=leave_node)
 
-        body_context = {
-            NEXTC: leave_node,
-            RAISEC: raise_node,
-        }
-        enter_node = self.analyse_statements(ast_node.body, body_context)
+        self._new_node(edges={ENTER: enter_node}, annotation="<start>")
 
-        self.context = {
-            ENTERC: enter_node,
-            NEXTC: leave_node,
-            RAISEC: raise_node,
-        }
-        return self
+        context = {ENTERC: enter_node}
+        if self._graph._backedges[raise_node]:
+            context[RAISEC] = raise_node
+        if self._graph._backedges[leave_node]:
+            context[LEAVE] = leave_node
 
-    @classmethod
-    def from_function(
-        cls, ast_node: Union[ast.AsyncFunctionDef, ast.FunctionDef]
+        return CFAnalysis(graph=self._graph, context=context)
+
+    def analyse_function(
+        self, ast_node: Union[ast.AsyncFunctionDef, ast.FunctionDef]
     ) -> CFAnalysis:
         """
         Construct a control flow graph for a function or coroutine AST node.
@@ -537,51 +493,44 @@ class CFAnalysis:
         ast_node : ast.FunctionDef or ast.AsyncFunctionDef
             Function node in the ast tree of the code being analysed.
         """
-        self = cls()
+        return_node = self._new_node(annotation="<return-without-value>")
+        return_value_node = self._new_node(annotation="<return-with-value>")
+        raise_node = self._new_node(annotation="<raise>")
 
-        # Node for returns without an explicit return value.
-        return_node = self.new_node(annotation="<return-without-value>")
-        # Node for returns *with* an explicit return value (which could
-        # be None).
-        return_value_node = self.new_node(annotation="<return-with-value>")
-        # Node for exit via raise.
-        raise_node = self.new_node(annotation="<raise>")
+        with self._updated_context(
+            {RAISEC: raise_node, RETURN: return_node, RETURN_VALUE: return_value_node}
+        ):
+            enter_node = self._analyse_statements(ast_node.body, next=return_node)
 
-        body_context = {
-            NEXTC: return_node,
-            RAISEC: raise_node,
-            RETURN: return_node,
-            RETURN_VALUE: return_value_node,
-        }
-        enter_node = self.analyse_statements(ast_node.body, body_context)
+        # Make sure there's at least one reference to the first node.
+        self._new_node(edges={ENTER: enter_node}, annotation="<start>")
 
-        self.context = {
-            ENTERC: enter_node,
-            RAISEC: raise_node,
-            RETURN: return_node,
-            RETURN_VALUE: return_value_node,
-        }
-        return self
+        context = {ENTERC: enter_node}
+        if self._graph._backedges[raise_node]:
+            context[RAISEC] = raise_node
+        if self._graph._backedges[return_value_node]:
+            context[RETURN_VALUE] = return_value_node
+        if self._graph._backedges[return_node]:
+            context[RETURN] = return_node
 
-    @classmethod
-    def from_module(cls, ast_node: ast.Module) -> CFAnalysis:
+        return CFAnalysis(graph=self._graph, context=context)
+
+    def analyse_module(self, ast_node: ast.Module) -> CFAnalysis:
         """
         Construct a control flow graph for an ast.Module node.
         """
-        self = cls()
+        leave_node = self._new_node(annotation="<leave>")
+        raise_node = self._new_node(annotation="<raise>")
 
-        leave_node = self.new_node(annotation="<leave>")
-        raise_node = self.new_node(annotation="<raise>")
+        with self._updated_context({RAISEC: raise_node}):
+            enter_node = self._analyse_statements(ast_node.body, next=leave_node)
 
-        body_context = {
-            NEXTC: leave_node,
-            RAISEC: raise_node,
-        }
-        enter_node = self.analyse_statements(ast_node.body, body_context)
+        self._new_node(edges={ENTER: enter_node}, annotation="<start>")
 
-        self.context = {
-            ENTERC: enter_node,
-            NEXTC: leave_node,
-            RAISEC: raise_node,
-        }
-        return self
+        context = {ENTERC: enter_node}
+        if self._graph._backedges[leave_node]:
+            context[LEAVE] = leave_node
+        if self._graph._backedges[raise_node]:
+            context[RAISEC] = raise_node
+
+        return CFAnalysis(graph=self._graph, context=context)
