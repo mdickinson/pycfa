@@ -17,20 +17,10 @@ Result of a control flow analysis applied to a module,
 function, coroutine or class.
 """
 
-from typing import Dict, Set
+from typing import Optional, Set
 
 from pycfa.cfgraph import CFGraph
 from pycfa.cfnode import CFNode
-
-#: Labels for particular identified nodes.
-ENTERC = "enterc"
-LEAVE = "leave"
-RAISEC = "raisec"
-RETURN = "return"
-RETURN_VALUE = "return_value"
-
-# Type alias for analysis contexts.
-Context = Dict[str, CFNode]
 
 
 class CFAnalysis:
@@ -38,16 +28,41 @@ class CFAnalysis:
     The control-flow analysis produced by the analyzer.
     """
 
+    #: The first node of the module, function or class.
+    entry_node: Optional[CFNode]
+
+    #: Dummy node representing the exit point of a module, function or class.
+    #: For functions, this node is reached on a plain "return" or on the implicit
+    #: return at the end of the function body. Functions that return a value
+    #: will reach return_node instead.
+    leave_node: Optional[CFNode]
+
+    #: Dummy node representing an uncaught exception in a module, function or class.
+    raise_node: Optional[CFNode]
+
+    #: Dummy node representing an explicit return-with-value from a function.
+    return_node: Optional[CFNode]
+
     #: The control-flow graph.
     _graph: CFGraph[CFNode]
 
-    #: Index to important nodes: mapping from labels to particular
-    #: nodes.
-    context: Context
-
-    def __init__(self, graph: CFGraph[CFNode], context: Context) -> None:
+    def __init__(
+        self,
+        graph: CFGraph[CFNode],
+        *,
+        entry_node: CFNode,
+        raise_node: Optional[CFNode] = None,
+        leave_node: Optional[CFNode] = None,
+        return_node: Optional[CFNode] = None,
+    ) -> None:
         self._graph = graph
-        self.context = context
+        self.entry_node = entry_node
+        if raise_node is not None:
+            self.raise_node = raise_node
+        if leave_node is not None:
+            self.leave_node = leave_node
+        if return_node is not None:
+            self.return_node = return_node
 
     # Graph inspection methods.
 
@@ -62,66 +77,3 @@ class CFAnalysis:
         Get labels of all edges.
         """
         return self._graph.edge_labels(source)
-
-    @property
-    def entry_node(self) -> CFNode:
-        """
-        Return the entry node for this analysis.
-        """
-        return self.context[ENTERC]
-
-    @property
-    def raise_node(self) -> CFNode:
-        """
-        Return the raise node for this analysis.
-
-        Raises
-        ------
-        AttributeError
-            If there's no raise node, because the function cannot raise.
-        """
-        if RAISEC in self.context:
-            return self.context[RAISEC]
-        else:
-            raise AttributeError("No raise node")
-
-    @property
-    def leave_node(self) -> CFNode:
-        """
-        Return the leave node for this analysis (relevant only for modules
-        and classes).
-        """
-        if LEAVE in self.context:
-            return self.context[LEAVE]
-        else:
-            raise AttributeError("No leave node")
-
-    @property
-    def return_with_value(self) -> CFNode:
-        """
-        The return node for paths that return with a value.
-
-        Raises
-        ------
-        AttributeError
-            If no path returns with a value.
-        """
-        if RETURN_VALUE in self.context:
-            return self.context[RETURN_VALUE]
-        else:
-            raise AttributeError("No returns with a value")
-
-    @property
-    def return_without_value(self) -> CFNode:
-        """
-        The return node for paths that return with a value.
-
-        Raises
-        ------
-        AttributeError
-            If no path returns with a value.
-        """
-        if RETURN in self.context:
-            return self.context[RETURN]
-        else:
-            raise AttributeError("No returns without a value")
