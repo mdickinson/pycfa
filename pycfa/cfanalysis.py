@@ -17,7 +17,7 @@ Result of a control flow analysis applied to a module,
 function, coroutine or class.
 """
 
-from typing import Optional, Set
+from typing import Iterable, Optional, Set
 
 from pycfa.cfgraph import CFGraph
 from pycfa.cfnode import CFNode
@@ -65,6 +65,12 @@ class CFAnalysis:
             self.return_node = return_node
 
     # Graph inspection methods.
+
+    def nodes(self) -> Iterable[CFNode]:
+        """
+        Iterable for the collection of all nodes.
+        """
+        return self._graph._nodes
 
     def edge(self, source: CFNode, label: str) -> CFNode:
         """
