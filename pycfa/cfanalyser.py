@@ -18,7 +18,7 @@ Analyse control flow for a piece of Python code.
 
 import ast
 import contextlib
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, Generator, List, Tuple, Union
 
 from pycfa.cfanalysis import CFAnalysis
 from pycfa.cfgraph import CFGraph
@@ -89,7 +89,7 @@ class CFAnalyser:
         self._graph.add_node(node, edges=edges)
         return node
 
-    def _ast_node(self, statement: ast.AST, **edges: CFNode):
+    def _ast_node(self, statement: ast.AST, **edges: CFNode) -> CFNode:
         """
         Create a new node wrapping an AST node, with given edges to existing nodes.
         """
@@ -97,7 +97,7 @@ class CFAnalyser:
         self._graph.add_node(node, edges=edges)
         return node
 
-    def _dummy_node(self):
+    def _dummy_node(self) -> CFNode:
         """
         Create a new dummy node, which will eventually be removed.
         """
@@ -108,7 +108,7 @@ class CFAnalyser:
     # Context management
 
     @contextlib.contextmanager
-    def _updated_context(self, **updates: CFNode):
+    def _updated_context(self, **updates: CFNode) -> Generator[None, None, None]:
         """
         Temporarily update the context dictionary with the given values.
         """
@@ -127,7 +127,7 @@ class CFAnalyser:
                     del context[label]
 
     @property
-    def _raise(self):
+    def _raise(self) -> CFNode:
         return self._context[_RAISE]
 
     # General analysis helpers.
@@ -163,7 +163,9 @@ class CFAnalyser:
         self._graph.collapse_node(dummy_node, loop_node)
         return loop_node
 
-    def _analyse_statements(self, statements: List[ast.stmt], *, next) -> CFNode:
+    def _analyse_statements(
+        self, statements: List[ast.stmt], *, next: CFNode
+    ) -> CFNode:
         """
         Analyse a sequence of statements.
         """
@@ -237,35 +239,35 @@ class CFAnalyser:
         """
         return expr.value
 
-    def _getvalue_expr_NameConstant(self, expr: ast.Constant) -> Any:
+    def _getvalue_expr_NameConstant(self, expr: ast.NameConstant) -> Any:
         """
         Value of a NameConstant expression.
         """
         return expr.value
 
-    def _getvalue_expr_Num(self, expr: ast.Constant) -> Any:
+    def _getvalue_expr_Num(self, expr: ast.Num) -> Any:
         """
         Value of a Num expression.
         """
         return expr.n
 
-    def _getvalue_expr_Str(self, expr: ast.Constant) -> str:
+    def _getvalue_expr_Str(self, expr: ast.Str) -> Any:
         """
         Value of a Str expression.
         """
         return expr.s
 
-    def _getvalue_expr_Bytes(self, expr: ast.Constant) -> bytes:
+    def _getvalue_expr_Bytes(self, expr: ast.Bytes) -> Any:
         """
         Value of a Bytes expression.
         """
         return expr.s
 
-    def _getvalue_expr_Ellipsis(self, expr: ast.Constant) -> Any:
+    def _getvalue_expr_Ellipsis(self, expr: ast.Ellipsis) -> Any:
         """
         Value of an Ellipsis expression.
         """
-        return ...
+        return Ellipsis
 
     # Statement analyzers for particular AST node types.
 

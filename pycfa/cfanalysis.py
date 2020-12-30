@@ -29,7 +29,7 @@ class CFAnalysis:
     """
 
     #: The first node of the module, function or class.
-    entry_node: Optional[CFNode]
+    entry_node: CFNode
 
     #: Dummy node representing the exit point of a module, function or class.
     #: For functions, this node is reached on a plain "return" or on the implicit
@@ -38,6 +38,7 @@ class CFAnalysis:
     leave_node: Optional[CFNode]
 
     #: Dummy node representing an uncaught exception in a module, function or class.
+    #: This attribute may be missing, but will not be None.
     raise_node: Optional[CFNode]
 
     #: Dummy node representing an explicit return-with-value from a function.
@@ -57,12 +58,9 @@ class CFAnalysis:
     ) -> None:
         self._graph = graph
         self.entry_node = entry_node
-        if raise_node is not None:
-            self.raise_node = raise_node
-        if leave_node is not None:
-            self.leave_node = leave_node
-        if return_node is not None:
-            self.return_node = return_node
+        self.raise_node = raise_node
+        self.leave_node = leave_node
+        self.return_node = return_node
 
     # Graph inspection methods.
 

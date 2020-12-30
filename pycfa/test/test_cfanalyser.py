@@ -18,10 +18,11 @@ Tests for CFAnalyser class.
 
 import ast
 import unittest
-from typing import Set
+from typing import Optional, Set, Tuple, Type
 
 from pycfa.cfanalyser import CFAnalyser, ELSE, ENTER, ERROR, NEXT
 from pycfa.cfanalysis import CFAnalysis
+from pycfa.cfnode import CFNode
 
 
 def all_statements(tree: ast.AST) -> Set[ast.stmt]:
@@ -45,7 +46,7 @@ def analysed_statements(analysis: CFAnalysis) -> Set[ast.stmt]:
 
 
 class TestCFAnalyser(unittest.TestCase):
-    def test_analyse_noop_function(self):
+    def test_analyse_noop_function(self) -> None:
         code = """\
 def f():
     pass
@@ -55,7 +56,7 @@ def f():
         self.assertEdges(analysis, pass_node, {NEXT})
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_analyse_single_expr_statement(self):
+    def test_analyse_single_expr_statement(self) -> None:
         code = """\
 def f():
     do_something()
@@ -66,7 +67,7 @@ def f():
         self.assertEdge(analysis, stmt_node, NEXT, analysis.leave_node)
         self.assertEdge(analysis, stmt_node, ERROR, analysis.raise_node)
 
-    def test_analyse_assign(self):
+    def test_analyse_assign(self) -> None:
         code = """\
 def f():
     a = 123
@@ -77,7 +78,7 @@ def f():
         self.assertEdge(analysis, stmt_node, NEXT, analysis.leave_node)
         self.assertEdge(analysis, stmt_node, ERROR, analysis.raise_node)
 
-    def test_analyse_multiple_statements(self):
+    def test_analyse_multiple_statements(self) -> None:
         code = """\
 def f():
     do_something()
@@ -94,7 +95,7 @@ def f():
         self.assertEdge(analysis, stmt2_node, NEXT, analysis.leave_node)
         self.assertEdge(analysis, stmt2_node, ERROR, analysis.raise_node)
 
-    def test_return_with_no_value(self):
+    def test_return_with_no_value(self) -> None:
         code = """\
 def f():
     return
@@ -104,7 +105,7 @@ def f():
         self.assertEdges(analysis, stmt_node, {NEXT})
         self.assertEdge(analysis, stmt_node, NEXT, analysis.leave_node)
 
-    def test_return_with_value(self):
+    def test_return_with_value(self) -> None:
         code = """\
 def f():
     return None
@@ -115,7 +116,7 @@ def f():
         self.assertEdge(analysis, stmt_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, stmt_node, NEXT, analysis.return_node)
 
-    def test_raise(self):
+    def test_raise(self) -> None:
         code = """\
 def f():
     raise TypeError("don't call me")
@@ -125,7 +126,7 @@ def f():
         self.assertEdges(analysis, stmt_node, {ERROR})
         self.assertEdge(analysis, stmt_node, ERROR, analysis.raise_node)
 
-    def test_if(self):
+    def test_if(self) -> None:
         code = """\
 def f():
     if condition:
@@ -143,7 +144,7 @@ def f():
         self.assertEdge(analysis, if_branch, NEXT, analysis.leave_node)
         self.assertEdge(analysis, if_node, ELSE, analysis.leave_node)
 
-    def test_if_else(self):
+    def test_if_else(self) -> None:
         code = """\
 def f():
     if condition:
@@ -168,7 +169,7 @@ def f():
         self.assertEdge(analysis, else_branch, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_branch, NEXT, analysis.leave_node)
 
-    def test_if_elif_else(self):
+    def test_if_elif_else(self) -> None:
         code = """\
 def f():
     if some_condition():
@@ -206,7 +207,7 @@ def f():
         self.assertEdge(analysis, else_branch, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_branch, NEXT, analysis.leave_node)
 
-    def test_return_in_if_and_else(self):
+    def test_return_in_if_and_else(self) -> None:
         code = """\
 def f():
     if condition:
@@ -231,7 +232,7 @@ def f():
         self.assertEdge(analysis, else_node, NEXT, analysis.return_node)
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
 
-    def test_plain_return_in_if_and_else(self):
+    def test_plain_return_in_if_and_else(self) -> None:
         code = """\
 def f():
     if condition:
@@ -254,7 +255,7 @@ def f():
         self.assertEdges(analysis, else_node, {NEXT})
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_unreachable_statements(self):
+    def test_unreachable_statements(self) -> None:
         code = """\
 def f():
     do_something()
@@ -271,7 +272,7 @@ def f():
         self.assertEdges(analysis, stmt2_node, {NEXT})
         self.assertEdge(analysis, stmt2_node, NEXT, analysis.leave_node)
 
-    def test_while(self):
+    def test_while(self) -> None:
         code = """\
 def f():
     while some_condition:
@@ -289,7 +290,7 @@ def f():
         self.assertEdge(analysis, body_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, body_node, NEXT, while_node)
 
-    def test_while_else(self):
+    def test_while_else(self) -> None:
         code = """\
 def f():
     while some_condition:
@@ -314,7 +315,7 @@ def f():
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_while_with_continue(self):
+    def test_while_with_continue(self) -> None:
         code = """\
 def f():
     while some_condition:
@@ -351,7 +352,7 @@ def f():
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_while_with_break(self):
+    def test_while_with_break(self) -> None:
         code = """\
 def f():
     while some_condition():
@@ -388,7 +389,7 @@ def f():
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_while_with_two_statements(self):
+    def test_while_with_two_statements(self) -> None:
         code = """\
 def f():
     while some_condition:
@@ -412,7 +413,7 @@ def f():
         self.assertEdge(analysis, body_node2, ERROR, analysis.raise_node)
         self.assertEdge(analysis, body_node2, NEXT, while_node)
 
-    def test_while_true(self):
+    def test_while_true(self) -> None:
         code = """\
 def f():
     while True:
@@ -427,14 +428,11 @@ def f():
         self.assertEdges(analysis, pass_node, {NEXT})
         self.assertEdge(analysis, pass_node, NEXT, while_node)
 
-        with self.assertRaises(AttributeError):
-            analysis.leave_node
-        with self.assertRaises(AttributeError):
-            analysis.return_node
-        with self.assertRaises(AttributeError):
-            analysis.raise_node
+        self.assertIsNone(analysis.leave_node)
+        self.assertIsNone(analysis.return_node)
+        self.assertIsNone(analysis.raise_node)
 
-    def test_while_false(self):
+    def test_while_false(self) -> None:
         code = """\
 def f():
     while False:
@@ -445,7 +443,7 @@ def f():
         self.assertEdges(analysis, while_node, {ELSE})
         self.assertEdge(analysis, while_node, ELSE, analysis.leave_node)
 
-    def test_if_true(self):
+    def test_if_true(self) -> None:
         code = """\
 if True:
     pass
@@ -462,7 +460,7 @@ else:
 
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_if_false(self):
+    def test_if_false(self) -> None:
         code = """\
 if False:
     do_something()
@@ -479,7 +477,7 @@ else:
 
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_if_general_constant(self):
+    def test_if_general_constant(self) -> None:
         # Check that various constants are recognised as such.
         true_constants = [
             "True",
@@ -514,7 +512,7 @@ else:
                 analysis, if_node = self._module_analysis(code)
                 self.assertEdges(analysis, if_node, {ELSE})
 
-    def test_assert_true(self):
+    def test_assert_true(self) -> None:
         # Note that some_expression is not evaluated if the constant is true,
         # so there's no path that can raise in this case.
         code = """\
@@ -525,7 +523,7 @@ assert True, some_expression()
         self.assertEdges(analysis, assert_node, {NEXT})
         self.assertEdge(analysis, assert_node, NEXT, analysis.leave_node)
 
-    def test_assert_false(self):
+    def test_assert_false(self) -> None:
         # Here the expression is evaluated, so we could end up either with
         # an AssertionError from the assert False, or with an exception
         # raised by some_expression(). Either way, we raise.
@@ -537,7 +535,7 @@ assert False, some_expression()
         self.assertEdges(analysis, assert_node, {ERROR})
         self.assertEdge(analysis, assert_node, ERROR, analysis.raise_node)
 
-    def test_assert_true_without_message(self):
+    def test_assert_true_without_message(self) -> None:
         # Note that some_expression is not evaluated if the constant is true,
         # so there's no path that can raise in this case.
         code = """\
@@ -548,7 +546,7 @@ assert True
         self.assertEdges(analysis, assert_node, {NEXT})
         self.assertEdge(analysis, assert_node, NEXT, analysis.leave_node)
 
-    def test_assert_false_without_message(self):
+    def test_assert_false_without_message(self) -> None:
         # Here the expression is evaluated, so we could end up either with
         # an AssertionError from the assert False, or with an exception
         # raised by some_expression(). Either way, we raise.
@@ -560,7 +558,7 @@ assert False
         self.assertEdges(analysis, assert_node, {ERROR})
         self.assertEdge(analysis, assert_node, ERROR, analysis.raise_node)
 
-    def test_assert_general(self):
+    def test_assert_general(self) -> None:
         code = """\
 assert some_test(), some_expression()
 """
@@ -570,7 +568,7 @@ assert some_test(), some_expression()
         self.assertEdge(analysis, assert_node, NEXT, analysis.leave_node)
         self.assertEdge(analysis, assert_node, ERROR, analysis.raise_node)
 
-    def test_if_else_analysed_even_if_unreachable(self):
+    def test_if_else_analysed_even_if_unreachable(self) -> None:
         code = """
 if True:
     do_something()
@@ -579,7 +577,7 @@ else:
 """
         self.assertAllStatementsCovered(code)
 
-    def test_if_analysed_even_if_unreachable(self):
+    def test_if_analysed_even_if_unreachable(self) -> None:
         code = """
 if False:
     do_something()
@@ -588,7 +586,7 @@ else:
 """
         self.assertAllStatementsCovered(code)
 
-    def test_statements_after_return_analysed(self):
+    def test_statements_after_return_analysed(self) -> None:
         code = """
 def f():
     return
@@ -602,7 +600,7 @@ def f():
 """
         self.assertAllFunctionStatementsCovered(code)
 
-    def test_for_with_continue(self):
+    def test_for_with_continue(self) -> None:
         code = """\
 def f():
     for item in some_list:
@@ -639,7 +637,7 @@ def f():
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_for_with_break(self):
+    def test_for_with_break(self) -> None:
         code = """\
 def f():
     for item in some_list:
@@ -676,7 +674,7 @@ def f():
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_try_except_else(self):
+    def test_try_except_else(self) -> None:
         code = """\
 def f():
     try:
@@ -719,7 +717,7 @@ def f():
         self.assertEdge(analysis, else_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, else_node, NEXT, analysis.leave_node)
 
-    def test_try_except_pass(self):
+    def test_try_except_pass(self) -> None:
         code = """\
 def f():
     try:
@@ -741,7 +739,7 @@ def f():
         self.assertEdges(analysis, pass_node, {NEXT})
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_raise_in_try(self):
+    def test_raise_in_try(self) -> None:
         code = """\
 def f():
     try:
@@ -771,7 +769,7 @@ def f():
         self.assertEdges(analysis, pass_node, {NEXT})
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_try_finally_pass(self):
+    def test_try_finally_pass(self) -> None:
         code = """\
 def f():
     try:
@@ -793,7 +791,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, analysis.leave_node)
 
-    def test_try_finally_raise(self):
+    def test_try_finally_raise(self) -> None:
         code = """\
 def f():
     try:
@@ -815,7 +813,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, analysis.raise_node)
 
-    def test_try_finally_return(self):
+    def test_try_finally_return(self) -> None:
         code = """\
 def f():
     try:
@@ -837,7 +835,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, analysis.leave_node)
 
-    def test_try_finally_return_value(self):
+    def test_try_finally_return_value(self) -> None:
         code = """\
 def f():
     try:
@@ -865,7 +863,7 @@ def f():
         self.assertEdge(analysis, finally2_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally2_node, NEXT, analysis.raise_node)
 
-    def test_try_finally_break(self):
+    def test_try_finally_break(self) -> None:
         code = """\
 def f():
     for item in items:
@@ -894,7 +892,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, analysis.leave_node)
 
-    def test_try_finally_continue(self):
+    def test_try_finally_continue(self) -> None:
         code = """\
 def f():
     for item in items:
@@ -922,7 +920,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, for_node)
 
-    def test_return_value_in_finally(self):
+    def test_return_value_in_finally(self) -> None:
         code = """\
 def f():
     try:
@@ -941,7 +939,7 @@ def f():
         self.assertEdge(analysis, return_node, NEXT, analysis.return_node)
         self.assertEdge(analysis, return_node, ERROR, analysis.raise_node)
 
-    def test_return_in_finally(self):
+    def test_return_in_finally(self) -> None:
         code = """\
 def f():
     try:
@@ -959,7 +957,7 @@ def f():
         self.assertEdges(analysis, return_node, {NEXT})
         self.assertEdge(analysis, return_node, NEXT, analysis.leave_node)
 
-    def test_raise_in_finally(self):
+    def test_raise_in_finally(self) -> None:
         code = """\
 def f():
     try:
@@ -979,7 +977,7 @@ def f():
         self.assertEdges(analysis, raise_node, {ERROR})
         self.assertEdge(analysis, raise_node, ERROR, analysis.raise_node)
 
-    def test_break_in_finally(self):
+    def test_break_in_finally(self) -> None:
         code = """\
 def f():
     for item in item_factory():
@@ -1005,7 +1003,7 @@ def f():
         self.assertEdges(analysis, break_node, {NEXT})
         self.assertEdge(analysis, break_node, NEXT, analysis.leave_node)
 
-    def test_continue_in_finally(self):
+    def test_continue_in_finally(self) -> None:
         code = """\
 def f():
     for item in item_factory():
@@ -1031,7 +1029,7 @@ def f():
         self.assertEdges(analysis, continue_node, {NEXT})
         self.assertEdge(analysis, continue_node, NEXT, for_node)
 
-    def test_continue_in_except_no_finally(self):
+    def test_continue_in_except_no_finally(self) -> None:
         code = """\
 def f():
     for item in item_factory():
@@ -1056,7 +1054,7 @@ def f():
         self.assertEdges(analysis, continue_node, {NEXT})
         self.assertEdge(analysis, continue_node, NEXT, for_node)
 
-    def test_continue_in_except(self):
+    def test_continue_in_except(self) -> None:
         code = """\
 def f():
     for item in item_factory():
@@ -1087,7 +1085,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, for_node)
 
-    def test_break_in_inner_loop(self):
+    def test_break_in_inner_loop(self) -> None:
         code = """\
 def f():
     while some_condition():
@@ -1108,7 +1106,7 @@ def f():
         self.assertEdges(analysis, break_node, {NEXT})
         self.assertEdge(analysis, break_node, NEXT, while_node)
 
-    def test_continue_in_inner_loop(self):
+    def test_continue_in_inner_loop(self) -> None:
         code = """\
 def f():
     while some_condition():
@@ -1129,7 +1127,7 @@ def f():
         self.assertEdges(analysis, continue_node, {NEXT})
         self.assertEdge(analysis, continue_node, NEXT, inner_while_node)
 
-    def test_break_in_except(self):
+    def test_break_in_except(self) -> None:
         code = """\
 def f():
     for item in item_factory():
@@ -1174,7 +1172,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, analysis.leave_node)
 
-    def test_return_in_try_else(self):
+    def test_return_in_try_else(self) -> None:
         code = """\
 def f():
     for item in item_factory():
@@ -1216,7 +1214,7 @@ def f():
         self.assertEdge(analysis, finally_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, finally_node, NEXT, analysis.leave_node)
 
-    def test_finally_analysed_even_if_not_reachable(self):
+    def test_finally_analysed_even_if_not_reachable(self) -> None:
         code = """\
 try:
     while True:
@@ -1233,7 +1231,7 @@ finally:
         ]
         self.assertEqual(len(assert_nodes), 1)
 
-    def test_finally_paths_combined(self):
+    def test_finally_paths_combined(self) -> None:
         # We potentially generate multiple paths for a finally block,
         # but paths with the same NEXT should be combined.
         code = """\
@@ -1260,12 +1258,12 @@ def f():
 
         self.assertEqual(raised_next, ok_next)
 
-    def test_empty_module(self):
+    def test_empty_module(self) -> None:
         code = ""
         analysis, enter_node = self._module_analysis(code)
         self.assertEqual(enter_node, analysis.leave_node)
 
-    def test_just_pass(self):
+    def test_just_pass(self) -> None:
         code = """\
 pass
 """
@@ -1274,7 +1272,7 @@ pass
         self.assertEdges(analysis, enter_node, {NEXT})
         self.assertEdge(analysis, enter_node, NEXT, analysis.leave_node)
 
-    def test_statements_outside_function(self):
+    def test_statements_outside_function(self) -> None:
         code = """\
 a = calculate()
 try:
@@ -1301,7 +1299,7 @@ except:
         self.assertEdges(analysis, pass_node, {NEXT})
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_with(self):
+    def test_with(self) -> None:
         code = """\
 with some_cm() as name:
     do_something()
@@ -1317,7 +1315,7 @@ with some_cm() as name:
         self.assertEdge(analysis, body_node, ERROR, analysis.raise_node)
         self.assertEdge(analysis, body_node, NEXT, analysis.leave_node)
 
-    def test_async_for(self):
+    def test_async_for(self) -> None:
         code = """\
 async def f():
     async for x in g():
@@ -1335,7 +1333,7 @@ async def f():
         self.assertEdge(analysis, yield_node, NEXT, for_node)
         self.assertEdge(analysis, yield_node, ERROR, analysis.raise_node)
 
-    def test_async_with(self):
+    def test_async_with(self) -> None:
         code = """\
 async def f():
     async with my_async_context():
@@ -1351,7 +1349,7 @@ async def f():
         self.assertEdges(analysis, pass_node, {NEXT})
         self.assertEdge(analysis, pass_node, NEXT, analysis.leave_node)
 
-    def test_classdef(self):
+    def test_classdef(self) -> None:
         code = """\
 class SomeClass:
     def some_method(self, arg1, arg2):
@@ -1363,7 +1361,7 @@ class SomeClass:
         self.assertEdge(analysis, initial, NEXT, analysis.leave_node)
         self.assertEdge(analysis, initial, ERROR, analysis.raise_node)
 
-    def test_global(self):
+    def test_global(self) -> None:
         code = """\
 def f():
     global bob
@@ -1374,7 +1372,7 @@ def f():
         self.assertEdges(analysis, node, {NEXT})
         self.assertEdge(analysis, node, NEXT, analysis.leave_node)
 
-    def test_nonlocal(self):
+    def test_nonlocal(self) -> None:
         code = """\
 def f(bob):
     def g():
@@ -1390,7 +1388,7 @@ def f(bob):
         self.assertEdges(analysis, node, {NEXT})
         self.assertEdge(analysis, node, NEXT, analysis.leave_node)
 
-    def test_assorted_simple_statements(self):
+    def test_assorted_simple_statements(self) -> None:
         code = """\
 del x, y, z
 def f():
@@ -1415,7 +1413,7 @@ async def beckett():
 
         self.assertEqual(node, analysis.leave_node)
 
-    def test_function_cant_raise(self):
+    def test_function_cant_raise(self) -> None:
         code = """\
 def f():
     try:
@@ -1424,28 +1422,25 @@ def f():
         pass
 """
         analysis, _ = self._function_analysis(code)
-        with self.assertRaises(AttributeError):
-            analysis.raise_node
+        self.assertIsNone(analysis.raise_node)
 
-    def test_function_no_return_value(self):
+    def test_function_no_return_value(self) -> None:
         code = """\
 def f():
     pass
 """
         analysis, _ = self._function_analysis(code)
-        with self.assertRaises(AttributeError):
-            analysis.return_node
+        self.assertIsNone(analysis.return_node)
 
-    def test_function_no_leave_node(self):
+    def test_function_no_leave_node(self) -> None:
         code = """\
 def f():
     return 123
 """
         analysis, _ = self._function_analysis(code)
-        with self.assertRaises(AttributeError):
-            analysis.leave_node
+        self.assertIsNone(analysis.leave_node)
 
-    def test_class_cant_raise(self):
+    def test_class_cant_raise(self) -> None:
         code = """\
 class A:
     try:
@@ -1454,10 +1449,9 @@ class A:
         pass
 """
         analysis, _ = self._class_analysis(code)
-        with self.assertRaises(AttributeError):
-            analysis.raise_node
+        self.assertIsNone(analysis.raise_node)
 
-    def test_module_cant_raise(self):
+    def test_module_cant_raise(self) -> None:
         code = """\
 try:
     something_or_other()
@@ -1465,32 +1459,33 @@ except:
     pass
 """
         analysis, _ = self._module_analysis(code)
-        with self.assertRaises(AttributeError):
-            analysis.raise_node
+        self.assertIsNone(analysis.raise_node)
 
     # Assertions
 
-    def assertEdges(self, analysis, node, edges):
+    def assertEdges(self, analysis: CFAnalysis, node: CFNode, edges: Set[str]) -> None:
         """
         Assert that the outward edges from a node have the given names.
         """
         self.assertEqual(analysis.edge_labels(node), edges)
 
-    def assertEdge(self, analysis, source, label, target):
+    def assertEdge(
+        self, analysis: CFAnalysis, source: CFNode, label: str, target: Optional[CFNode]
+    ) -> None:
         """
         Assert that the given edge from the given source maps to the
         given target.
         """
         self.assertEqual(analysis.edge(source, label), target)
 
-    def assertNodetype(self, node, nodetype):
+    def assertNodetype(self, node: CFNode, nodetype: Type[ast.AST]) -> None:
         """
         Assert that the given control-flow analysis node is associated
         to an ast node of the given type.
         """
         self.assertIsInstance(node.ast_node, nodetype)
 
-    def assertAllStatementsCovered(self, code):
+    def assertAllStatementsCovered(self, code: str) -> None:
         """
         Check that all statements in the given code are covered
         by the analysis.
@@ -1500,7 +1495,7 @@ except:
         analysis = CFAnalyser().analyse_module(tree)
         self.assertEqual(analysed_statements(analysis), all_statements(tree))
 
-    def assertAllFunctionStatementsCovered(self, code):
+    def assertAllFunctionStatementsCovered(self, code: str) -> None:
         """
         Check that all statements in the given code are covered
         by the analysis.
@@ -1512,42 +1507,44 @@ except:
 
     # Helper methods
 
-    def _function_analysis(self, code):
+    def _function_analysis(self, code: str) -> Tuple[CFAnalysis, CFNode]:
         function_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body[0]
         self.assertIsInstance(function_node, (ast.AsyncFunctionDef, ast.FunctionDef))
 
         analysis = CFAnalyser().analyse_function(function_node)
-        if hasattr(analysis, "raise_node"):
+        if analysis.raise_node is not None:
             self.assertEdges(analysis, analysis.raise_node, set())
-        if hasattr(analysis, "leave_node"):
+        if analysis.leave_node is not None:
             self.assertEdges(analysis, analysis.leave_node, set())
-        if hasattr(analysis, "return_node"):
+        if analysis.return_node is not None:
             self.assertEdges(analysis, analysis.return_node, set())
 
         return analysis, analysis.entry_node
 
-    def _module_analysis(self, code):
+    def _module_analysis(self, code: str) -> Tuple[CFAnalysis, CFNode]:
         module_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
         self.assertIsInstance(module_node, ast.Module)
 
         analysis = CFAnalyser().analyse_module(module_node)
 
-        if hasattr(analysis, "raise_node"):
+        self.assertIsNone(analysis.return_node)
+        if analysis.raise_node is not None:
             self.assertEdges(analysis, analysis.raise_node, set())
-        if hasattr(analysis, "leave_node"):
+        if analysis.leave_node is not None:
             self.assertEdges(analysis, analysis.leave_node, set())
 
         return analysis, analysis.entry_node
 
-    def _class_analysis(self, code):
+    def _class_analysis(self, code: str) -> Tuple[CFAnalysis, CFNode]:
         class_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body[0]
         self.assertIsInstance(class_node, ast.ClassDef)
 
         analysis = CFAnalyser().analyse_class(class_node)
 
-        if hasattr(analysis, "raise_node"):
+        self.assertIsNone(analysis.return_node)
+        if analysis.raise_node is not None:
             self.assertEdges(analysis, analysis.raise_node, set())
-        if hasattr(analysis, "leave_node"):
+        if analysis.leave_node is not None:
             self.assertEdges(analysis, analysis.leave_node, set())
 
         return analysis, analysis.entry_node
