@@ -18,8 +18,30 @@ Tests for CFAnalyser class.
 
 import ast
 import unittest
+from typing import Set
 
 from pycfa.cfanalyser import CFAnalyser, ELSE, ENTER, ERROR, NEXT
+from pycfa.cfanalysis import CFAnalysis
+
+
+def all_statements(tree: ast.AST) -> Set[ast.stmt]:
+    """
+    Return the set of all ast.stmt nodes in a tree.
+    """
+    return {node for node in ast.walk(tree) if isinstance(node, ast.stmt)}
+
+
+def analysed_statements(analysis: CFAnalysis) -> Set[ast.stmt]:
+    """
+    Return the set of all ast statements that have a corresponding node
+    in an analysis object.
+    """
+    return {
+        node.ast_node
+        for node in analysis.nodes()
+        if hasattr(node, "ast_node")
+        if isinstance(node.ast_node, ast.stmt)
+    }
 
 
 class TestCFAnalyser(unittest.TestCase):
@@ -548,13 +570,37 @@ assert some_test(), some_expression()
         self.assertEdge(analysis, assert_node, NEXT, analysis.leave_node)
         self.assertEdge(analysis, assert_node, ERROR, analysis.raise_node)
 
-    # XXX Test that the 'else' branch is still analysed even in
-    # the case that it can't be reached.
+    def test_if_else_analysed_even_if_unreachable(self):
+        code = """
+if True:
+    do_something()
+else:
+    do_something_else()
+"""
+        self.assertAllStatementsCovered(code)
 
-    # XXX Add test for dummy nodes left in the graph. Maybe have the analyser
-    # keep track and assert that none are left?
+    def test_if_analysed_even_if_unreachable(self):
+        code = """
+if False:
+    do_something()
+else:
+    do_something_else()
+"""
+        self.assertAllStatementsCovered(code)
 
-    # XXX Add test for coverage?
+    def test_statements_after_return_analysed(self):
+        code = """
+def f():
+    return
+    a = 23
+    return True
+    b = 56
+    raise RuntimeError()
+    c = 78
+    assert False, "never get here"
+    d = 123
+"""
+        self.assertAllFunctionStatementsCovered(code)
 
     def test_for_with_continue(self):
         code = """\
@@ -1444,10 +1490,30 @@ except:
         """
         self.assertIsInstance(node.ast_node, nodetype)
 
+    def assertAllStatementsCovered(self, code):
+        """
+        Check that all statements in the given code are covered
+        by the analysis.
+        """
+        tree = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST)
+        self.assertIsInstance(tree, ast.Module)
+        analysis = CFAnalyser().analyse_module(tree)
+        self.assertEqual(analysed_statements(analysis), all_statements(tree))
+
+    def assertAllFunctionStatementsCovered(self, code):
+        """
+        Check that all statements in the given code are covered
+        by the analysis.
+        """
+        tree = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body[0]
+        self.assertIsInstance(tree, ast.FunctionDef)
+        analysis = CFAnalyser().analyse_function(tree)
+        self.assertEqual(analysed_statements(analysis), all_statements(tree) - {tree})
+
     # Helper methods
 
     def _function_analysis(self, code):
-        (function_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
+        function_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body[0]
         self.assertIsInstance(function_node, (ast.AsyncFunctionDef, ast.FunctionDef))
 
         analysis = CFAnalyser().analyse_function(function_node)
@@ -1474,10 +1540,10 @@ except:
         return analysis, analysis.entry_node
 
     def _class_analysis(self, code):
-        (module_node,) = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body
-        self.assertIsInstance(module_node, ast.ClassDef)
+        class_node = compile(code, "test_cf", "exec", ast.PyCF_ONLY_AST).body[0]
+        self.assertIsInstance(class_node, ast.ClassDef)
 
-        analysis = CFAnalyser().analyse_class(module_node)
+        analysis = CFAnalyser().analyse_class(class_node)
 
         if hasattr(analysis, "raise_node"):
             self.assertEdges(analysis, analysis.raise_node, set())

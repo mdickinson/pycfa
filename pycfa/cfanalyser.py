@@ -172,7 +172,7 @@ class CFAnalyser:
             next = analyse(statement, next=next)
         return next
 
-    def _analyse_try_except_else(self, statement: ast.Try, *, next: CFNode) -> CFNode:
+    def _analyse_try_except(self, statement: ast.Try, *, next: CFNode) -> CFNode:
         """
         Analyse the try-except-else part of a try statement. The finally
         part is ignored, as though it weren't present.
@@ -461,7 +461,7 @@ class CFAnalyser:
         # it as two separate pieces: it's equivalent to the try-except-else
         # piece, nested *inside* a try-finally. Analysis of the try-except-else
         # piece is fairly straightforward, and is handled by the
-        # _analyse_try_except_else method.
+        # _analyse_try_except method.
 
         # The finally block can be entered by up to six different means,
         # depending on the context: from a return with-or-without value (if
@@ -494,20 +494,17 @@ class CFAnalyser:
                 dummy_nodes[node] = self._dummy_node()
             target_nodes[label] = finally_node if node == next else dummy_nodes[node]
 
-        # Analyse the try-except-else part of the statement using those dummy
-        # nodes in place of the real ones.
         with self._updated_context(**target_nodes):
-            entry_node = self._analyse_try_except_else(statement, next=finally_node)
+            entry_node = self._analyse_try_except(statement, next=finally_node)
 
-        # Now iterate through the dummy nodes. For those that aren't reached,
-        # remove them. For those that are, replace with the corresponding
-        # finally code.
+        # Remove dummy nodes that aren't reached; replace those that are with a
+        # path through the finally branch.
         for end_node, dummy_node in dummy_nodes.items():
-            if self._has_parents(dummy_node):
-                finally_node = self._analyse_statements(
-                    statement.finalbody, next=end_node
+            if end_node == next or self._has_parents(dummy_node):
+                self._graph.collapse_node(
+                    dummy_node,
+                    self._analyse_statements(statement.finalbody, next=end_node),
                 )
-                self._graph.collapse_node(dummy_node, finally_node)
             else:
                 self._graph.remove_node(dummy_node)
 
