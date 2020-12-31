@@ -23,7 +23,7 @@ from pycfa.cfgraph import CFGraph
 
 
 class TestCFGraph(unittest.TestCase):
-    def test_add_node_with_edges(self):
+    def test_add_node_with_edges(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(23, edges={})
         self.assertIn(23, graph)
@@ -31,49 +31,42 @@ class TestCFGraph(unittest.TestCase):
         graph.add_node(47, edges={"next": 23})
         self.assertIn(47, graph)
 
-    def test_add_node_edges_parameter_is_optional(self):
+    def test_add_node_edges_parameter_is_optional(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(23)
         self.assertIn(23, graph)
 
-    def test_add_node_edges_parameter_is_keyword_only(self):
-        # The edges parameter must be passed by name.
-        graph: CFGraph[int] = CFGraph()
-        with self.assertRaises(TypeError):
-            graph.add_node(23, {})
-        self.assertNotIn(23, graph)
-
-    def test_add_node_twice(self):
+    def test_add_node_twice(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(23)
         with self.assertRaises(ValueError):
             graph.add_node(23)
 
-    def test_add_node_with_self_edge(self):
+    def test_add_node_with_self_edge(self) -> None:
         graph: CFGraph[int] = CFGraph()
         with self.assertRaises(ValueError):
             graph.add_node(23, edges={"self": 23})
 
-    def test_add_node_edge_to_nonexistent_node(self):
+    def test_add_node_edge_to_nonexistent_node(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(23)
         with self.assertRaises(ValueError):
             graph.add_node(47, edges={"next": 48})
 
-    def test_remove_node(self):
+    def test_remove_node(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(47)
         self.assertIn(47, graph)
         graph.remove_node(47)
         self.assertNotIn(47, graph)
 
-    def test_remove_nonexistent_node(self):
+    def test_remove_nonexistent_node(self) -> None:
         graph: CFGraph[int] = CFGraph()
         with self.assertRaises(ValueError):
             graph.remove_node(47)
         self.assertNotIn(47, graph)
 
-    def test_remove_node_with_forward_edges(self):
+    def test_remove_node_with_forward_edges(self) -> None:
         graph: CFGraph[int] = CFGraph()
 
         graph.add_node(24)
@@ -82,7 +75,7 @@ class TestCFGraph(unittest.TestCase):
             graph.remove_node(23)
         self.assertIn(23, graph)
 
-    def test_remove_node_with_back_edges(self):
+    def test_remove_node_with_back_edges(self) -> None:
         graph: CFGraph[int] = CFGraph()
 
         graph.add_node(24)
@@ -91,7 +84,7 @@ class TestCFGraph(unittest.TestCase):
             graph.remove_node(24)
         self.assertIn(24, graph)
 
-    def test_collapse_node(self):
+    def test_collapse_node(self) -> None:
         graph: CFGraph[int] = CFGraph()
 
         graph.add_node(3)
@@ -115,7 +108,7 @@ class TestCFGraph(unittest.TestCase):
         self.assertEqual(graph.edge(0, "next"), 3)
         self.assertEqual(graph.edges_to(3), {(0, "next"), (1, "step")})
 
-    def test_collapse_node_with_forward_edges(self):
+    def test_collapse_node_with_forward_edges(self) -> None:
         graph: CFGraph[int] = CFGraph()
 
         graph.add_node(3)
@@ -125,7 +118,7 @@ class TestCFGraph(unittest.TestCase):
         with self.assertRaises(ValueError):
             graph.collapse_node(1, 3)
 
-    def test_collapse_node_with_bad_node(self):
+    def test_collapse_node_with_bad_node(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(3)
 
@@ -135,7 +128,7 @@ class TestCFGraph(unittest.TestCase):
         with self.assertRaises(ValueError):
             graph.collapse_node(3, 1)
 
-    def test_collapse_with_identical_nodes(self):
+    def test_collapse_with_identical_nodes(self) -> None:
         graph: CFGraph[int] = CFGraph()
         graph.add_node(3)
 

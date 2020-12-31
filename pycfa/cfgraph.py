@@ -32,13 +32,13 @@ Parallel edges (with different labels) and self-loops are permitted.
 Nodes can be any hashable object.
 """
 
-from typing import Dict, Generic, Mapping, Optional, Set, Tuple, TypeVar
+from typing import Container, Dict, Mapping, Optional, Set, Tuple, TypeVar
 
 #: Type of nodes. For now, require only that nodes are hashable.
 NodeType = TypeVar("NodeType")
 
 
-class CFGraph(Generic[NodeType]):
+class CFGraph(Container[NodeType]):
     """
     The directed graph underlying the control flow graph.
     """
@@ -64,7 +64,7 @@ class CFGraph(Generic[NodeType]):
         node: NodeType,
         *,
         edges: Optional[Mapping[str, NodeType]] = None,
-    ):
+    ) -> None:
         """
         Add a new node, along with edges to existing nodes to the graph.
 
@@ -185,7 +185,7 @@ class CFGraph(Generic[NodeType]):
 
     # Support for membership testing
 
-    def __contains__(self, node: NodeType) -> bool:
+    def __contains__(self, node: object) -> bool:
         """
         Determine whether a given node is contained in the graph.
         """
