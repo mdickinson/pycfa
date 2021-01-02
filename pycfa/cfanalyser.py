@@ -236,6 +236,13 @@ class CFAnalyser:
         else:
             return False, None
 
+    def _is_constant(self, expr: ast.expr) -> bool:
+        """
+        Return True if the given expression is a compile-time constant, else False.
+        """
+        is_constant, _ = self._expression_as_constant(expr)
+        return is_constant
+
     # Expression value getters for particular AST node types.
     def _getvalue_expr_Constant(self, expr: ast.Constant) -> Any:
         """
@@ -452,15 +459,22 @@ class CFAnalyser:
         """
         Analyse a return statement.
         """
-        if statement.value is None:
-            node = self._ast_node(statement, next=self._context[_LEAVE])
-            if self._context[_LEAVE] == next:
-                self._redundant_returns.append(node)
-            return node
-        else:
-            return self._ast_node(
-                statement, next=self._context[_RETURN], error=self._raise
+        nodes = dict(
+            next=(
+                self._context[_LEAVE]
+                if statement.value is None
+                else self._context[_RETURN]
             )
+        )
+
+        if statement.value is not None and not self._is_constant(statement.value):
+            nodes.update(error=self._raise)
+
+        node = self._ast_node(statement, **nodes)
+        if nodes == {NEXT: next}:
+            # A pass would have had the same effect.
+            self._redundant_returns.append(node)
+        return node
 
     def _analyse_stmt_Try(self, statement: ast.Try, *, next: CFNode) -> CFNode:
         """

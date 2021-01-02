@@ -108,7 +108,7 @@ def f():
     def test_return_with_value(self) -> None:
         code = """\
 def f():
-    return None
+    return a_value()
 """
         analysis, stmt_node = self._function_analysis(code)
         self.assertNodetype(stmt_node, ast.Return)
@@ -211,9 +211,9 @@ def f():
         code = """\
 def f():
     if condition:
-        return 123
+        return something()
     else:
-        return 456
+        return something_else()
 """
         analysis, if_node = self._function_analysis(code)
         self.assertNodetype(if_node, ast.If)
@@ -839,9 +839,9 @@ def f():
         code = """\
 def f():
     try:
-        return "abc"
+        return some_value()
     finally:
-        do_something()
+        do_cleanup()
 """
         analysis, start_node = self._function_analysis(code)
         self.assertNodetype(start_node, ast.Try)
@@ -1423,6 +1423,16 @@ def f():
 """
         analysis, _ = self._function_analysis(code)
         self.assertIsNone(analysis.raise_node)
+
+    def test_function_return_constant_cant_raise(self) -> None:
+        code = """\
+def f():
+    return 23
+"""
+        analysis, _ = self._function_analysis(code)
+        self.assertIsNone(analysis.leave_node)
+        self.assertIsNone(analysis.raise_node)
+        self.assertIsNotNone(analysis.return_node)
 
     def test_function_no_return_value(self) -> None:
         code = """\
