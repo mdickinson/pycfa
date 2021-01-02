@@ -17,7 +17,7 @@ Result of a control flow analysis applied to a module,
 function, coroutine or class.
 """
 
-from typing import Iterable, Optional, Set
+from typing import Iterable, List, Optional, Set
 
 from pycfa.cfgraph import CFGraph
 from pycfa.cfnode import CFNode
@@ -44,6 +44,9 @@ class CFAnalysis:
     #: Dummy node representing an explicit return-with-value from a function.
     return_node: Optional[CFNode]
 
+    #: List of nodes representing redundant returns
+    redundant_returns: List[CFNode]
+
     #: The control-flow graph.
     _graph: CFGraph[CFNode]
 
@@ -55,12 +58,16 @@ class CFAnalysis:
         raise_node: Optional[CFNode] = None,
         leave_node: Optional[CFNode] = None,
         return_node: Optional[CFNode] = None,
+        redundant_returns: Optional[List[CFNode]] = None,
     ) -> None:
         self._graph = graph
         self.entry_node = entry_node
         self.raise_node = raise_node
         self.leave_node = leave_node
         self.return_node = return_node
+        if redundant_returns is None:
+            redundant_returns = []
+        self.redundant_returns = redundant_returns
 
     # Graph inspection methods.
 

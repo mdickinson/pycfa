@@ -63,9 +63,13 @@ class CFAnalyser:
     #: Current context, while graph is under construction.
     _context: _Context
 
+    #: List of nodes corresponding to redundant return statements found.
+    _redundant_returns: List[CFNode]
+
     def __init__(self) -> None:
         self._graph = CFGraph()
         self._context = {}
+        self._redundant_returns = []
 
     # Graph building methods.
 
@@ -449,7 +453,10 @@ class CFAnalyser:
         Analyse a return statement.
         """
         if statement.value is None:
-            return self._ast_node(statement, next=self._context[_LEAVE])
+            node = self._ast_node(statement, next=self._context[_LEAVE])
+            if self._context[_LEAVE] == next:
+                self._redundant_returns.append(node)
+            return node
         else:
             return self._ast_node(
                 statement, next=self._context[_RETURN], error=self._raise
@@ -567,7 +574,11 @@ class CFAnalyser:
         else:
             self._graph.remove_node(raise_node)
 
-        return CFAnalysis(graph=self._graph, **key_nodes)
+        return CFAnalysis(
+            graph=self._graph,
+            redundant_returns=self._redundant_returns,
+            **key_nodes,
+        )
 
     def analyse_function(
         self, ast_node: Union[ast.AsyncFunctionDef, ast.FunctionDef]
@@ -608,7 +619,11 @@ class CFAnalyser:
         else:
             self._graph.remove_node(return_node)
 
-        return CFAnalysis(graph=self._graph, **key_nodes)
+        return CFAnalysis(
+            graph=self._graph,
+            redundant_returns=self._redundant_returns,
+            **key_nodes,
+        )
 
     def analyse_module(self, ast_node: ast.Module) -> CFAnalysis:
         """
@@ -632,4 +647,8 @@ class CFAnalyser:
         else:
             self._graph.remove_node(raise_node)
 
-        return CFAnalysis(graph=self._graph, **key_nodes)
+        return CFAnalysis(
+            graph=self._graph,
+            redundant_returns=self._redundant_returns,
+            **key_nodes,
+        )
