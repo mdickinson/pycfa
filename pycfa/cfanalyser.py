@@ -449,11 +449,13 @@ class CFAnalyser:
         Analyse a return statement.
         """
         if statement.value is None:
-            return self._ast_node(statement, next=self._context[_LEAVE])
+            nodes = dict(next=self._context[_LEAVE])
         else:
-            return self._ast_node(
-                statement, next=self._context[_RETURN], error=self._raise
-            )
+            nodes = dict(next=self._context[_RETURN])
+            value_is_constant, _ = self._expression_as_constant(statement.value)
+            if not value_is_constant:
+                nodes.update(error=self._raise)
+        return self._ast_node(statement, **nodes)
 
     def _analyse_stmt_Try(self, statement: ast.Try, *, next: CFNode) -> CFNode:
         """
